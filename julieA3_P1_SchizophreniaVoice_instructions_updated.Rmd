@@ -114,9 +114,10 @@ first <- read.delim("Pitch/Study1D0S101T1_f0.txt")
 
 
 
-test <- as.data.frame(mean(first$mean)) 
+test <- as.data.frame(mean(first$time))
 test$time_sd <- sd(first$time)
-test$time_range <- range(first$time)
+test$time_min <- min(first$time)
+test$time_max <- max(first$time)
 test$time_iqr <- IQR(first$time)
 test$time_median <- median(first$time)
 test$time_meanAD <- mad(first$time)
@@ -125,7 +126,8 @@ test$time_cv <- sd(first$time, na.rm = TRUE / mean(first$time, na.rm = TRUE))*10
 
 test$f0_mean <- mean(first$f0)
 test$f0_sd <- sd(first$f0)
-test$f0_range <- range(first$f0)
+test$f0_min <- min(first$time)
+test$f0_max <- max(first$time)
 test$f0_iqr <- IQR(first$f0)
 test$f0_median <- median(first$f0)
 test$f0_meanAD <- mad(first$f0)
