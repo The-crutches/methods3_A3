@@ -107,19 +107,24 @@ Only then (when everything works) turn the code into a function and use map_df()
 See placeholder code here for help.
 
 ```{r}
+install.packages('rio')
 library(pacman)
-p_load(tidyverse)
+p_load(tidyverse, rio)
 ```
 
 
 ```{r}
-ex <- read.delim('Pitch/Study1D0S101T1_f0.txt', header = T)
+
+
+first <- read.delim('Pitch/Study1D0S101T1_f0.txt')
 ex2 <- read.delim('Pitch/Study1D1s111T1_f0.txt', header = T)
 
-x <-list.files('Test')
+ex <- convert("Pitch/Study1D0S101T1_f0.txt", "Pitch/Study1D0S101T1_f0.csv")
+
+x <-list.files('Test') [1]
 x <- as.data.frame(x)
 
-data_path <- "Test"   # path to the data
+data_path <- "Pitch/"   # path to the data
 files <- dir(data_path) # get file names
 
 data <- data %>% mutate(file = files)
@@ -138,21 +143,60 @@ data <- data_frame(filename = 'Test') %>% # create a data frame
         )  
 data
 
-x <- list.files('Pitch/')
-
+x <- list.files('Pitch/', full.names = T)
+?list.files
 ```
 
 ```{r}
 df <- ex %>%
   map(summary)
 
-df1 <- do.call(rbind.data.frame, df) %>% pivot_wider()
+df1 <- do.call(rbind.data.frame, df)
+
+df2 <- df1[1,]
+df2$filename <- cbind(x)
+
+
+print(first)
+```
+
+```{r}
+
+read_csv("data/filename")
+
+?read_delim
+
+read_pitch <- function(filename) {
+  first <- read.delim(filename)
+  test <- as.data.frame(mean(first$time))
+  test$time_sd <- sd(first$time)
+  test$time_min <- min(first$time)
+  test$time_max <- max(first$time)
+  test$time_iqr <- IQR(first$time)
+  test$time_median <- median(first$time)
+  test$time_meanAD <- mad(first$time)
+  test$time_cv <- sd(first$time, na.rm = TRUE / mean(first$time, na.rm = TRUE))*100
+  test$f0_mean <- mean(first$f0)
+  test$f0_sd <- sd(first$f0)
+  test$f0_min <- min(first$time)
+  test$f0_max <- max(first$time)
+  test$f0_iqr <- IQR(first$f0)
+  test$f0_median <- median(first$f0)
+  test$f0_meanAD <- mad(first$f0)
+  test$f0_cv <- sd(first$f0, na.rm = TRUE / mean(first$time, na.rm = TRUE))*100
+  #test$file_name <- cbind(first)
+    return(test)
+}
+
+f <- read_pitch(ex2)
+
 
 ```
 
 
 ```{r}
 read_pitch <- function(filename) {
+  
     # load data
     
     # parse filename to extract study, diagnosis, subject and trial
@@ -167,7 +211,8 @@ read_pitch <- function(filename) {
 test_data = read_pitch("Pitch/a_file_to_test.txt")
 
 # when you've created a function that works, you can
-pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
+pitch_data = list.files(path = "Pitch/",pattern = ".txt", 
+                        full.names = T) %>% ## NB replace with your path to the files
     purrr::map_df(read_pitch)
 
 write_csv(pitch_data, ...)
