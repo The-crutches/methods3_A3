@@ -109,8 +109,25 @@ See placeholder code here for help.
 ```{r}
 library(tidyverse)
 
+first <- read.delim("Pitch/Study1D0S101T1_f0.txt")
+
+
+
+
+test <- as.data.frame(mean(first$mean)) 
+test$sd <- sd(first$time)
+test$range <- range(first$time)
+test$iqr <- IQR(first$time)
+test$median <- median(first$time)
+test$meanAD <- mad(first$time)
+test$cv <- sd(first$time, na.rm = TRUE / mean(first$time, na.rm = TRUE))*100
+
+
+
+
 read_pitch <- function(filename) {
     # load data
+    
     
     # parse filename to extract study, diagnosis, subject and trial
     
@@ -128,6 +145,8 @@ pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% #
     purrr::map_df(read_pitch)
 
 write_csv(pitch_data, ...)
+
+
 
 ```
 
