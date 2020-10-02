@@ -107,14 +107,12 @@ Only then (when everything works) turn the code into a function and use map_df()
 See placeholder code here for help.
 
 ```{r}
-
 library(pacman)
-p_load(tidyverse, plyr, fs)
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
 ```
 
 
 ```{r}
-pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
 
 # Function to extract study, diagnosis, subject and trial from the file name + adding columns 
 read_pitch <- function(filename) {
@@ -175,7 +173,7 @@ pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.
     purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-write_csv(pitch_data, 'pitch_data_clean')
+write_csv(pitch_data, 'pitch_data_clean.csv')
 ```
 
 
@@ -194,46 +192,47 @@ df <- df %>% mutate(
                     )
 
 ```
-`
-
-
-```{r}
-read_pitch <- function(filename) {
-  
-    # load data
-    
-    # parse filename to extract study, diagnosis, subject and trial
-    
-    # extract pitch descriptors (mean, sd, iqr, etc)
-    
-    # combine all this data in one dataset
-    return(data)
-}
-
-# test it on just one file while writing the function
-test_data = read_pitch("Pitch/a_file_to_test.txt")
-
-# when you've created a function that works, you can
-pitch_data = list.files(path = "Pitch/",pattern = ".txt", 
-                        full.names = T) %>% ## NB replace with your path to the files
-    purrr::map_df(read_pitch)
-
-write_csv(pitch_data, ...)
-
-```
 
 
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
 # Let's start with the demographic and clinical data
+demo <- read.csv('DemographicData.csv', sep = ';', header = T)
+
+demo <-demo[-c(387:391),]
+
+#demo <- demo %>% fill(SANS)  can fill in data, but we don't want that apparently
 
 # then duration data
+art <- read.delim('Articulation.txt', sep = ',', header = T)
+
+art <- art %>% mutate(
+  Study = str_extract(soundname, '\\d'),
+  Diagnosis = str_sub(soundname, 8, 8),
+  Subject = str_extract(soundname, '\\d{3}'),
+  Trial = str_extract(soundname, '.\\d$'),
+  Trial = str_replace(Trial, pattern = 'T', ''),
+    Subject = as.factor(Subject),
+    Study = as.numeric(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Diagnosis = recode(Diagnosis, 
+                           '0' = 'Control',
+                           '1' = 'Schizophrenia')
+  )
+
+art$soundname <- NULL
 
 # Finally the pitch data
+pitch <- read.csv('pitch_data_clean.csv')
 
 # Now we merge them
+demo$ID <- paste0(demo$Participant, demo$Diagnosis)
+art$ID <- paste0(art$Subject,art$Diagnosis)
+pitch$ID <- paste0(pitch$Subject, pitch$Diagnosis)
 
+one <- merge(demo, pitch, all = F)
+df <- merge(one, art, all = F)
 # Now we save them
 
 ```
@@ -246,6 +245,13 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+df$Diagnosis <- na.omit(df$Diagnosis)
+df$ID <- na.omit(df$ID)
+df$Gender <- na.omit(df$Gender)
+
+
+df %>% split(df$Diagnosis) %>% map(summary) 
+
 
 ```
 
