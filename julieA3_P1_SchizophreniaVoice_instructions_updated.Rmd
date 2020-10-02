@@ -162,6 +162,69 @@ write_csv(pitch_data, ...)
 ```
 
 
+### Sigrid ###
+
+```{r}
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
+
+# Function to extract study, diagnosis, subject and trial from the file name + adding columns 
+read_pitch <- function(filename) {
+    # getting filenames and subsetting them
+    files = path_file(path = filename) 
+    
+    for (file in filename){
+    Study = substr(files, 6,6)
+    Diagnosis = substr(files, 8,8)
+    Subject = substr(files, 10, 12)
+    Trial = substr(files, 14,15)
+    }
+    # creating dataframes, loading data and and merging the df's
+    df = data_frame(Study, Diagnosis, Subject, Trial)
+    df1 = read.delim(filename)
+    data = merge(df, df1)
+    
+    # extract pitch descriptors (mean, sd, iqr, etc)
+    data$pitch_mean = mean(data$f0)
+    data$pitch_df = sd(data$f0)
+    range = range(data$f0)
+    data$pitch_range_low = range[1]
+    data$pitch_range_high = range[2]
+    data$pitch_median = median(data$f0)
+    data$pitch_IQR = IQR(data$f0)
+    data$pitch_meanAD = MeanAD(data$f0)
+    data$picth_cv = cv(data$f0)
+    data = slice(data,(1))
+    
+    data = data %>% mutate(
+        Trial = str_replace_all(data$Trial, '[[:punct:]]', ''),
+        Subject = as.numeric(Subject),
+        Study = as.numeric(Study),
+        Diagnosis = as.factor(Diagnosis),
+        Diagnosis = recode(Diagnosis, 
+                           '0' = 'Control',
+                           '1' = 'Schizophrenia')
+        )
+
+    # combine all this data in one dataset
+    return(data)
+}
+
+
+# test it on just one file while writing the function
+test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+
+# when you've created a function that works, you can
+pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.names = T) %>% 
+    purrr::map_df(read_pitch)
+
+# save the new dataset as a csv file
+write_csv(pitch_data, 'pitch_data_clean')
+
+```
+
+```
+
+
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
