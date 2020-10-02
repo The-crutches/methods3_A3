@@ -109,7 +109,7 @@ See placeholder code here for help.
 ```{r}
 library(tidyverse)
 
-first <- read.delim("Pitch/Study1D0S101T1_f0.txt")
+data <- read.delim("Pitch/Study1D0S101T1_f0.txt")
 
 
 
@@ -218,11 +218,12 @@ pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.
     purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-write_csv(pitch_data, 'pitch_data_clean')
+write_csv(pitch_data, 'pitch_data_clean.csv')
+
 
 ```
 
-```
+
 
 
 ### Now you need to merge demographic/clinical, duration and pitch data
@@ -230,11 +231,52 @@ write_csv(pitch_data, 'pitch_data_clean')
 ```{r}
 # Let's start with the demographic and clinical data
 
+demo <-  read.csv("~/Uni stuff/Expmeth3/methods3_A3/DemographicData.csv", sep = ";")
+
+demo <- demo %>%  
+    filter(is.na(Diagnosis) == F) %>% 
+    mutate(
+        Subject = as.numeric(Subject),
+        Study = as.numeric(Study),
+        Diagnosis = as.factor(Diagnosis)
+    )
+
+
 # then duration data
 
+duration <- read.csv("Articulation.txt")
+
+#cleaning up duration more nicely
+duration <- duration %>% mutate(
+    Study = substr(duration$soundname, 6,6),
+    Study = as.numeric(Study),
+    Diagnosis = substr(duration$soundname, 8,8),
+    Diagnosis = recode(Diagnosis, 
+               '0' = 'Control',
+               '1' = 'Schizophrenia'),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = substr(duration$soundname, 10,12),
+    Subject = as.numeric(Subject),
+    Trial = str_extract(soundname, "T\\d{1,2}"),
+    Trial = str_extract(soundname, "\\d{1,2}"),
+    Trial = as.factor(Trial),
+)
+
+# creating new IDs
+pitch_data$new_ID <- paste0(pitch_data$Diagnosis, pitch_data$Subject)
+demo$new_ID <- paste0(demo$Diagnosis, demo$Subject)
+duration$new_ID <- paste0(duration$Diagnosis, duration$Subject)
+
+
+df <- merge(demo, pitch_data, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
+df1 <- merge(df, duration, by = c('new_ID','Study', 'Diagnosis', 'Trial'), all = T)
 # Finally the pitch data
 
+pitch_data
+
 # Now we merge them
+
+
 
 # Now we save them
 
