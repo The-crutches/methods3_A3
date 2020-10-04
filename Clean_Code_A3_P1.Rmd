@@ -96,6 +96,12 @@ NB. the filenames indicate:
 - S: the subject ID (NB. some controls and schizophrenia are matched, so there is a 101 schizophrenic and a 101 control). Also note that study 5-6 have weird numbers and no matched participants, so feel free to add e.g. 1000 to the participant ID in those studies.
 - T: the trial, that is, the recording ID for that participant, 1-10 (note that study 5-6 have more)
 
+```{r}
+#Loading packages
+library(pacman)
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
+```
+
 ### Getting to the pitch data
 
 You have oh so many pitch files. What you want is a neater dataset, with one row per recording, including a bunch of meaningful descriptors of pitch. For instance, we should include "standard" descriptors: mean, standard deviation, range. Additionally, we should also include less standard, but more robust ones: e.g. median, iqr, mean absoluted deviation, coefficient of variation. The latter ones are more robust to outliers and non-normal distributions.
@@ -107,13 +113,6 @@ Only then (when everything works) turn the code into a function and use map_df()
 See placeholder code here for help.
 
 ```{r}
-library(pacman)
-pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
-```
-
-
-```{r}
-
 # Function to extract study, diagnosis, subject and trial from the file name + adding columns 
 read_pitch <- function(filename) {
     # getting filenames and subsetting them
@@ -166,30 +165,16 @@ read_pitch <- function(filename) {
 }
 
 # test it on just one file while writing the function
-test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+#test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+    #it works
 
 # when you've created a function that works, you can
-pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.names = T) %>% 
-    purrr::map_df(read_pitch)
+#pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.names = T) %>% 
+    #purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-write_csv(pitch_data, 'pitch_data_clean.csv')
-```
-
-
-
-```{r}
-
-# testing regex
-files <- list.files('Pitch/')
-df <- cbind(files, pitch_data)
-
-df <- df %>% mutate(
-  ID = substr(df$files, 10, 12), #this doesn't hold up, more than 1 Subj number, plus the extra files are messed up
-  study = substr(df$files, 6, 6),
-  diagnosis = substr(df$files, 8, 8),
-  trial = substr(df$files, '^S', '[_]') #this bot doesn't work either, need regex of some sort
-                    )
+#write_csv(pitch_data, 'pitch_data_clean.csv')
+    #We have saved it 
 
 ```
 
@@ -199,14 +184,17 @@ df <- df %>% mutate(
 ```{r}
 # Let's start with the demographic and clinical data
 demo <- read.csv('DemographicData.csv', sep = ';', header = T)
+demo <- demo %>% 
+    rename(Subject = Participant) 
 
-demo <-demo[-c(387:391),]
+#Removing observations that are not from the danish study
+demo <- demo%>% 
+    filter(Language == "Danish")
 
-#demo <- demo %>% fill(SANS)  can fill in data, but we don't want that apparently
-
-# then duration data
+# Then duration data
 art <- read.delim('Articulation.txt', sep = ',', header = T)
 
+# Cleaning duration/articulation data 
 art <- art %>% mutate(
   Study = str_extract(soundname, '\\d'),
   Diagnosis = str_sub(soundname, 8, 8),
@@ -223,17 +211,50 @@ art <- art %>% mutate(
 
 art$soundname <- NULL
 
+#Removing observations that are not from the danish study
+art <- art %>% filter(
+    Study == 1 | Study == 2 | Study == 3 | Study == 4)
+
 # Finally the pitch data
 pitch <- read.csv('pitch_data_clean.csv')
 
-# Now we merge them
-demo$ID <- paste0(demo$Participant, demo$Diagnosis)
-art$ID <- paste0(art$Subject,art$Diagnosis)
-pitch$ID <- paste0(pitch$Subject, pitch$Diagnosis)
+#Removing observations that are not from the danish study
+pitch <- pitch %>% filter(
+    Study == 1 | Study == 2 | Study == 3 | Study == 4)
 
-one <- merge(demo, pitch, all = F)
-df <- merge(one, art, all = F)
+# Now we merge them
+    # But first we make sure that everything is in the same class 
+
+#For demo
+demo <- demo %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject))
+
+#For art
+art <- art %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject), 
+    Trial = as.factor(Trial))
+
+#For pitch
+pitch <- pitch %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject), 
+    Trial = as.factor(Trial))
+
+#Merging
+df1 <- merge(art, demo, all = T)
+df <- merge(df1, pitch, all = T)
+    #Getting 4492 observation of 38 variables 
+    #We have 3.826 files 
+
+
 # Now we save them
+
+#write_csv(df, "SchizophreniaData.csv")
 
 ```
 
@@ -245,13 +266,6 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-df$Diagnosis <- na.omit(df$Diagnosis)
-df$ID <- na.omit(df$ID)
-df$Gender <- na.omit(df$Gender)
-
-
-df %>% split(df$Diagnosis) %>% map(summary) 
-
 
 ```
 
