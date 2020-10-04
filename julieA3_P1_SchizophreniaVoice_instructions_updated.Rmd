@@ -218,7 +218,7 @@ pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.
     purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-write_csv(pitch_data, 'pitch_data_clean.csv')
+
 
 
 ```
@@ -234,6 +234,7 @@ write_csv(pitch_data, 'pitch_data_clean.csv')
 demo <-  read.csv("~/Uni stuff/Expmeth3/methods3_A3/DemographicData.csv", sep = ";")
 
 demo <- demo %>%  
+    rename(Subject = Participant) %>% 
     filter(is.na(Diagnosis) == F) %>% 
     mutate(
         Subject = as.numeric(Subject),
@@ -241,46 +242,48 @@ demo <- demo %>%
         Diagnosis = as.factor(Diagnosis)
     )
 
-
 # then duration data
 
-duration <- read.csv("Articulation.txt")
+art <- read.csv("Articulation.txt")
 
 #cleaning up duration more nicely
-duration <- duration %>% mutate(
-    Study = substr(duration$soundname, 6,6),
+art <- art %>% mutate(
+    Study = substr(art$soundname, 6,6),
     Study = as.numeric(Study),
-    Diagnosis = substr(duration$soundname, 8,8),
+    Diagnosis = substr(art$soundname, 8,8),
     Diagnosis = recode(Diagnosis, 
                '0' = 'Control',
                '1' = 'Schizophrenia'),
     Diagnosis = as.factor(Diagnosis),
-    Subject = substr(duration$soundname, 10,12),
+    Subject = substr(art$soundname, 10,12),
     Subject = as.numeric(Subject),
     Trial = str_extract(soundname, "T\\d{1,2}"),
     Trial = str_extract(soundname, "\\d{1,2}"),
     Trial = as.factor(Trial),
 )
 
+
+# Finally the pitch data
+
+pitch_data <- read.csv("pitch_data_clean.csv")
+
+# Now we merge them
 # creating new IDs
 pitch_data$new_ID <- paste0(pitch_data$Diagnosis, pitch_data$Subject)
 demo$new_ID <- paste0(demo$Diagnosis, demo$Subject)
-duration$new_ID <- paste0(duration$Diagnosis, duration$Subject)
+art$new_ID <- paste0(art$Diagnosis, art$Subject)
 
 
-df <- merge(demo, pitch_data, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
-df1 <- merge(df, duration, by = c('new_ID','Study', 'Diagnosis', 'Trial'), all = T)
-# Finally the pitch data
-
-pitch_data
-
-# Now we merge them
 
 
 
 # Now we save them
 
+df <- merge(demo, pitch_data, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
+df1 <- merge(df, art, by = c('new_ID','Study', 'Diagnosis', 'Trial'), all = T)
+
 ```
+
 
 ## Now we need to describe our sample
 
@@ -290,6 +293,39 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+# there are no NA's in subject, diagnosis and study for DEMO
+demo_no_na <- demo %>% filter(
+    is.na(Subject) == F,
+    is.na(Diagnosis) == F,
+    is.na(Study) == F
+)
+
+# Duration - loses 500 observations
+duration_no_na <- duration %>% filter(
+    is.na(Subject) == F,
+    is.na(Diagnosis) == F,
+    is.na(Study) == F
+)
+
+# pitch_data - loses 500 observations
+pitch_no_na <- pitch_data %>% filter(
+    is.na(Subject) == F,
+    is.na(Diagnosis) == F,
+    is.na(Study) == F
+)
+
+# creating new IDs
+pitch_no_na$new_ID <- paste0(pitch_no_na$Diagnosis, pitch_no_na$Subject)
+demo_no_na$new_ID <- paste0(demo_no_na$Diagnosis, demo_no_na$Subject)
+duration_no_na$new_ID <- paste0(duration_no_na$Diagnosis, duration_no_na$Subject)
+
+# trying to merge the no na's dataframes
+
+df_no_na <- merge(demo_no_na, pitch_no_na, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
+
+df_no_na_1 <- merge(df_no_na, duration_no_na, by = c('new_ID', 'Study', 'Diagnosis', 'Trial'), all = T)
+
+df_no_na_1 %>% split(df_no_na_1$Diagnosis) %>% map(summary)
 
 ```
 
