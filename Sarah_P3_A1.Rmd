@@ -177,23 +177,6 @@ write_csv(pitch_data, 'pitch_data_clean.csv')
 ```
 
 
-
-```{r}
-
-# testing regex
-files <- list.files('Pitch/')
-df <- cbind(files, pitch_data)
-
-df <- df %>% mutate(
-  ID = substr(df$files, 10, 12), #this doesn't hold up, more than 1 Subj number, plus the extra files are messed up
-  study = substr(df$files, 6, 6),
-  diagnosis = substr(df$files, 8, 8),
-  trial = substr(df$files, '^S', '[_]') #this bot doesn't work either, need regex of some sort
-                    )
-
-```
-
-
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
@@ -202,7 +185,10 @@ demo <- read.csv('DemographicData.csv', sep = ';', header = T)
 
 demo <-demo[-c(387:391),]
 
-#demo <- demo %>% fill(SANS)  can fill in data, but we don't want that apparently
+demo <- demo %>% 
+  filter(Study <= 4) %>% 
+  rename(Subject = Participant)
+
 
 # then duration data
 art <- read.delim('Articulation.txt', sep = ',', header = T)
@@ -223,16 +209,60 @@ art <- art %>% mutate(
 
 art$soundname <- NULL
 
+art <- art %>% 
+  filter(Study <= 4, Subject != 342)
+
+# participant 342 has numerous trials registered? and an odd filename, resulting in error
+
 # Finally the pitch data
 pitch <- read.csv('pitch_data_clean.csv')
 
+pitch <- pitch %>% 
+  filter(Study <= 4, Subject != 342)
+
+#something wrong with 342 also
+#removing him, because the file is unreliable, can't tell which trial is correct
+```
+
+
+```{r}
 # Now we merge them
-demo$ID <- paste0(demo$Participant, demo$Diagnosis)
+demo$ID <- paste0(demo$Subject, demo$Diagnosis)
 art$ID <- paste0(art$Subject,art$Diagnosis)
 pitch$ID <- paste0(pitch$Subject, pitch$Diagnosis)
 
-one <- merge(demo, pitch, all = F)
-df <- merge(one, art, all = F)
+  # create a surrogate key by adding trial to iD in a new column?
+# don't know if this is necessary or not
+art$ID2 <- paste0(art$Subject,art$Diagnosis, art$Trial)
+pitch$ID2 <- paste0(pitch$Subject, pitch$Diagnosis, pitch$Trial)
+
+#assesing that ID2 is unique
+x <- art %>% count(ID2) %>% filter(ID2 > 1) 
+y <- pitch %>% count(ID2) %>% filter(ID2 > 1) 
+
+#try both left join and full join to see what happens. 
+pitch_art <- pitch %>% 
+  left_join(art)
+
+pitch_art$Subject <- as.factor(pitch_art$Subject)
+demo$Subject <- as.factor(demo$Subject)
+
+df <- pitch_art %>% left_join(demo)
+
+# left join: make sure the most important dataset comes first, as it drops values in right dataset, if there isn't a match in left dataset- 
+
+df <- df %>% mutate(
+  Trial = as.factor(df$Trial),
+  Study = as.factor(df$Study),
+  ID = as.factor(df$ID),
+  Diagnosis = as.factor(df$Diagnosis),
+  ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
+  Gender = as.factor(df$Gender),
+  Age = as.factor(df$Age)
+)
+
+df$ID2 <- NULL
+
 # Now we save them
 
 ```
@@ -245,10 +275,11 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-df$Diagnosis <- na.omit(df$Diagnosis)
-df$ID <- na.omit(df$ID)
-df$Gender <- na.omit(df$Gender)
-
+df2 <- df
+#df <- df %>% fill(SANS) 
+df <- na.omit(df2)
+#can fill in data, but not sure if it makes sense?
+?fill()
 
 df %>% split(df$Diagnosis) %>% map(summary) 
 
@@ -273,13 +304,50 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-   set.seed(1)
-   x <- runif(7)
+p_load(tidymodels)
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
+#pitch variability - all pitch values?
+#proportion of spoken time - 
+#speech rate - 
+#pause duration - n pause, 
 
-   scale(x)
+
+
+# should we select out variables like ID and Subject?
+#also the trial and f0 column that randomly appeared somewhere?
+
+m <- as.tibble(df)
+m <- df %>% select(-time, -f0, -Language, -Study, -Trial, -Subject)
+
+m_split <- initial_split(m)
+
+m_split %>% training() %>% glimpse()
+
+test <- m_split %>% testing() %>% glimpse()
+
+m_recipe <- training(m_split) %>%
+  recipe(Diagnosis ~.) %>%
+  step_corr(all_numeric()) %>%
+  step_center(all_numeric(), -all_outcomes()) %>%
+  step_scale(all_numeric(), -all_outcomes()) %>%
+  step_dummy(all_nominal()) %>% 
+  prep(retain = TRUE)
+
+m_recipe <- m_recipe %>% prep(retain = TRUE)
+
+#prep(retain = TRUE)
+?prep()
+m_recipe
+
+
+testing_r <- m_recipe %>% bake(testing(m_split))
+training_r <- bake(m_recipe, new_data = m)
+
+
+glimpse(test_set)
+
+juiced_training <- juice(training_r) 
+
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
