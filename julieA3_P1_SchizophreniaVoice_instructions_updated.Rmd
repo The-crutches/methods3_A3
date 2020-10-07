@@ -5,10 +5,6 @@ date: "August 09, 2019"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ## Assignment 3 - Part 1 - Assessing voice in schizophrenia
 
 Individuals with schizophrenia (SCZ) tend to present voice atypicalities. Their tone is described as "inappropriate" voice, sometimes monotone, sometimes croaky. This is important for two reasons. First, voice could constitute a direct window into cognitive, emotional and social components of the disorder, thus providing a cheap and relatively non-invasive way to support the diagnostic and assessment process (via automated analyses). Second, voice atypicalities play an important role in the social impairment experienced by individuals with SCZ, and are thought to generate negative social judgments (of unengaged, slow, unpleasant interlocutors), which can cascade in more negative and less frequent social interactions.
@@ -96,6 +92,12 @@ NB. the filenames indicate:
 - S: the subject ID (NB. some controls and schizophrenia are matched, so there is a 101 schizophrenic and a 101 control). Also note that study 5-6 have weird numbers and no matched participants, so feel free to add e.g. 1000 to the participant ID in those studies.
 - T: the trial, that is, the recording ID for that participant, 1-10 (note that study 5-6 have more)
 
+```{r}
+#Loading packages
+library(pacman)
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
+```
+
 ### Getting to the pitch data
 
 You have oh so many pitch files. What you want is a neater dataset, with one row per recording, including a bunch of meaningful descriptors of pitch. For instance, we should include "standard" descriptors: mean, standard deviation, range. Additionally, we should also include less standard, but more robust ones: e.g. median, iqr, mean absoluted deviation, coefficient of variation. The latter ones are more robust to outliers and non-normal distributions.
@@ -107,69 +109,9 @@ Only then (when everything works) turn the code into a function and use map_df()
 See placeholder code here for help.
 
 ```{r}
-library(tidyverse)
-
-data <- read.delim("Pitch/Study1D0S101T1_f0.txt")
-
-
-
-
-test <- as.data.frame(mean(first$time))
-test$time_sd <- sd(first$time)
-test$time_min <- min(first$time)
-test$time_max <- max(first$time)
-test$time_iqr <- IQR(first$time)
-test$time_median <- median(first$time)
-test$time_meanAD <- mad(first$time)
-test$time_cv <- sd(first$time, na.rm = TRUE / mean(first$time, na.rm = TRUE))*100
-
-
-test$f0_mean <- mean(first$f0)
-test$f0_sd <- sd(first$f0)
-test$f0_min <- min(first$time)
-test$f0_max <- max(first$time)
-test$f0_iqr <- IQR(first$f0)
-test$f0_median <- median(first$f0)
-test$f0_meanAD <- mad(first$f0)
-test$f0_cv <- sd(first$f0, na.rm = TRUE / mean(first$time, na.rm = TRUE))*100
-
-
-
-
-read_pitch <- function(filename) {
-    # load data
-    
-    
-    # parse filename to extract study, diagnosis, subject and trial
-    
-    # extract pitch descriptors (mean, sd, iqr, etc)
-    
-    # combine all this data in one dataset
-    return(data)
-}
-
-# test it on just one file while writing the function
-test_data = read_pitch("Pitch/a_file_to_test.txt")
-
-# when you've created a function that works, you can
-pitch_data = list.files(path = "Assignment3/data/Pitch/",pattern = ".txt") %>% ## NB replace with your path to the files
-    purrr::map_df(read_pitch)
-
-write_csv(pitch_data, ...)
-
-
-
-```
-
-
-### Sigrid ###
-
-```{r}
-pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
-
 # Function to extract study, diagnosis, subject and trial from the file name + adding columns 
 read_pitch <- function(filename) {
-    # getting filenames and subsetting them
+    # getting filenames and subsetting the relevant parts
     files = path_file(path = filename) 
     
     for (file in filename){
@@ -185,19 +127,28 @@ read_pitch <- function(filename) {
     
     # extract pitch descriptors (mean, sd, iqr, etc)
     data$pitch_mean = mean(data$f0)
-    data$pitch_df = sd(data$f0)
-    range = range(data$f0)
-    data$pitch_range_low = range[1]
-    data$pitch_range_high = range[2]
+    data$pitch_sd = sd(data$f0)
+    data$pitch_min = min(data$f0)
+    data$pitch_max = max(data$f0)
     data$pitch_median = median(data$f0)
     data$pitch_IQR = IQR(data$f0)
     data$pitch_meanAD = MeanAD(data$f0)
     data$picth_cv = cv(data$f0)
+    
+    #extracting time descriptors
+    data$time_mean = mean(data$time)
+    data$time_sd = sd(data$time)
+    data$time_min = min(data$time)
+    data$time_max = max(data$time)
+    data$time_iqr = IQR(data$time)
+    data$time_median  = median(data$time)
+    data$time_meanAD = mad(data$time)
+    data$time_cv = cv(data$time)
     data = slice(data,(1))
     
     data = data %>% mutate(
         Trial = str_replace_all(data$Trial, '[[:punct:]]', ''),
-        Subject = as.numeric(Subject),
+        Subject = as.factor(Subject),
         Study = as.numeric(Study),
         Diagnosis = as.factor(Diagnosis),
         Diagnosis = recode(Diagnosis, 
@@ -209,81 +160,125 @@ read_pitch <- function(filename) {
     return(data)
 }
 
-
 # test it on just one file while writing the function
-test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+#test_data = read_pitch("Pitch/Study1D0S101T1_f0.txt")
+    #it works
 
 # when you've created a function that works, you can
-pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.names = T) %>% 
-    purrr::map_df(read_pitch)
+#pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.names = T) %>% 
+    #purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-
-
+#write_csv(pitch_data, 'pitch_data_clean.csv')
+    #We have saved it 
 
 ```
-
-
 
 
 ### Now you need to merge demographic/clinical, duration and pitch data
 
 ```{r}
 # Let's start with the demographic and clinical data
+demo <- read.csv('DemographicData.csv', sep = ';', header = T)
 
-demo <-  read.csv("~/Uni stuff/Expmeth3/methods3_A3/DemographicData.csv", sep = ";")
+demo <-demo[-c(387:391),]
 
-demo <- demo %>%  
-    rename(Subject = Participant) %>% 
-    filter(is.na(Diagnosis) == F) %>% 
-    mutate(
-        Subject = as.numeric(Subject),
-        Study = as.numeric(Study),
-        Diagnosis = as.factor(Diagnosis)
-    )
+demo <- demo %>% 
+  filter(Study <= 4) %>% 
+  rename(Subject = Participant)
 
-# then duration data
 
-art <- read.csv("Articulation.txt")
+# Then duration data
+art <- read.delim('Articulation.txt', sep = ',', header = T)
 
-#cleaning up duration more nicely
+# Cleaning duration/articulation data 
 art <- art %>% mutate(
-    Study = substr(art$soundname, 6,6),
+  Study = str_extract(soundname, '\\d'),
+  Diagnosis = str_sub(soundname, 8, 8),
+  Subject = str_extract(soundname, '\\d{3}'),
+  Trial = str_extract(soundname, '.\\d$'),
+  Trial = str_replace(Trial, pattern = 'T', ''),
+    Subject = as.factor(Subject),
     Study = as.numeric(Study),
-    Diagnosis = substr(art$soundname, 8,8),
-    Diagnosis = recode(Diagnosis, 
-               '0' = 'Control',
-               '1' = 'Schizophrenia'),
     Diagnosis = as.factor(Diagnosis),
-    Subject = substr(art$soundname, 10,12),
-    Subject = as.numeric(Subject),
-    Trial = str_extract(soundname, "T\\d{1,2}"),
-    Trial = str_extract(soundname, "\\d{1,2}"),
-    Trial = as.factor(Trial),
-)
+    Diagnosis = recode(Diagnosis, 
+                           '0' = 'Control',
+                           '1' = 'Schizophrenia')
+  )
 
+art$soundname <- NULL
+
+#Removing observations that are not from the danish study
+art <- art %>% 
+  filter(Study <= 4, Subject != 342)
 
 # Finally the pitch data
+pitch <- read.csv('pitch_data.csv')
 
-pitch_data <- read.csv("pitch_data_clean.csv")
+#Removing observations that are not from the danish study
+pitch <- pitch %>% 
+  filter(Study <= 4, Subject != 342)
 
 # Now we merge them
-# creating new IDs
-pitch_data$new_ID <- paste0(pitch_data$Diagnosis, pitch_data$Subject)
-demo$new_ID <- paste0(demo$Diagnosis, demo$Subject)
-art$new_ID <- paste0(art$Diagnosis, art$Subject)
+    # But first we make sure that everything is in the same class 
+ 
+#For demo
+demo <- demo %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject))
 
+#For art
+art <- art %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject), 
+    Trial = as.factor(Trial))
 
+#For pitch
+pitch <- pitch %>% mutate(
+    Study = as.factor(Study),
+    Diagnosis = as.factor(Diagnosis),
+    Subject = as.factor(Subject), 
+    Trial = as.factor(Trial))
 
+#Merging
+demo$ID <- paste0(demo$Subject, demo$Diagnosis)
+art$ID <- paste0(art$Subject,art$Diagnosis)
+pitch$ID <- paste0(pitch$Subject, pitch$Diagnosis)
 
+  # create a surrogate key by adding trial to iD in a new column?
+# don't know if this is necessary or not
+art$ID2 <- paste0(art$Subject,art$Diagnosis, art$Trial)
+pitch$ID2 <- paste0(pitch$Subject, pitch$Diagnosis, pitch$Trial)
 
+#assesing that ID2 is unique
+x <- art %>% count(ID2) %>% filter(ID2 > 1) 
+y <- pitch %>% count(ID2) %>% filter(ID2 > 1) 
+
+#try both left join and full join to see what happens. 
+pitch_art <- pitch %>% 
+  left_join(art)
+
+pitch_art$Subject <- as.factor(pitch_art$Subject)
+
+df <- pitch_art %>% left_join(demo)
+
+#correcting final dataset classes
+df <- df %>% mutate(
+  Trial = as.factor(df$Trial),
+  Study = as.factor(df$Study),
+  ID = as.factor(df$ID),
+  Diagnosis = as.factor(df$Diagnosis),
+  ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
+  Gender = as.factor(df$Gender),
+  Age = as.factor(df$Age)
+)
 # Now we save them
 
-df <- merge(demo, pitch_data, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
-df1 <- merge(df, art, by = c('new_ID','Study', 'Diagnosis', 'Trial'), all = T)
+#write_csv(df, "SchizophreniaData.csv")
 
 ```
-
 
 ## Now we need to describe our sample
 
@@ -293,39 +288,11 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-# there are no NA's in subject, diagnosis and study for DEMO
-demo_no_na <- demo %>% filter(
-    is.na(Subject) == F,
-    is.na(Diagnosis) == F,
-    is.na(Study) == F
-)
+df <- na.omit(df)
 
-# Duration - loses 500 observations
-duration_no_na <- duration %>% filter(
-    is.na(Subject) == F,
-    is.na(Diagnosis) == F,
-    is.na(Study) == F
-)
-
-# pitch_data - loses 500 observations
-pitch_no_na <- pitch_data %>% filter(
-    is.na(Subject) == F,
-    is.na(Diagnosis) == F,
-    is.na(Study) == F
-)
-
-# creating new IDs
-pitch_no_na$new_ID <- paste0(pitch_no_na$Diagnosis, pitch_no_na$Subject)
-demo_no_na$new_ID <- paste0(demo_no_na$Diagnosis, demo_no_na$Subject)
-duration_no_na$new_ID <- paste0(duration_no_na$Diagnosis, duration_no_na$Subject)
-
-# trying to merge the no na's dataframes
-
-df_no_na <- merge(demo_no_na, pitch_no_na, by = c('new_ID', 'Study', 'Diagnosis'), all = T)
-
-df_no_na_1 <- merge(df_no_na, duration_no_na, by = c('new_ID', 'Study', 'Diagnosis', 'Trial'), all = T)
-
-df_no_na_1 %>% split(df_no_na_1$Diagnosis) %>% map(summary)
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary) 
 
 ```
 
@@ -347,13 +314,15 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-   set.seed(1)
-   x <- runif(7)
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
+#what predictors will fit in to the 4 categories?
+#pitch variability - all pitch values?
+#proportion of spoken time - 
+#speech rate - 
+#pause duration - n pause, 
 
-   scale(x)
+
+
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
