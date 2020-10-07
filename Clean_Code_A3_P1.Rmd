@@ -292,7 +292,7 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-df <- na.omit(df)
+# there are only NA's in the demo data, and there are so many that if we remove them, we romeove study 3 and 4 completely. as they are not included in our models, we won't remove htem. 
 
 df %>% 
   split(df$Diagnosis) %>% 
