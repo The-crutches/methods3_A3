@@ -99,7 +99,7 @@ NB. the filenames indicate:
 ```{r}
 #Loading packages
 library(pacman)
-pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools, EMAtools)
 ```
 
 ### Getting to the pitch data
@@ -137,7 +137,7 @@ read_pitch <- function(filename) {
     data$pitch_median = median(data$f0)
     data$pitch_IQR = IQR(data$f0)
     data$pitch_meanAD = MeanAD(data$f0)
-    data$picth_cv = cv(data$f0)
+    data$pitch_cv = cv(data$f0)
     
     #extracting time descriptors
     data$time_mean = mean(data$time)
