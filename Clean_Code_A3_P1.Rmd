@@ -1,8 +1,8 @@
 ---
 title: "Assignment 3 - Part 1 - Voice In Schizophrenia"
-author: "Riccardo Fusaroli"
-date: "August 09, 2019"
-output: html_document
+author: "Studygroup 4 - Kristine, Nanna, Julie, Sarah, Martine"
+date: "07-10-2020"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -99,7 +99,7 @@ NB. the filenames indicate:
 ```{r}
 #Loading packages
 library(pacman)
-pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools)
+pacman::p_load(tidyverse, fs, readr, EnvStats, DescTools, pastecs)
 ```
 
 ### Getting to the pitch data
@@ -112,7 +112,7 @@ Tip: Load one file (as a sample) and:
 Only then (when everything works) turn the code into a function and use map_df() to apply it to all the files.
 See placeholder code here for help.
 
-```{r}
+```{r eval=FALSE}
 # Function to extract study, diagnosis, subject and trial from the file name + adding columns 
 read_pitch <- function(filename) {
     # getting filenames and subsetting the relevant parts
@@ -173,7 +173,7 @@ read_pitch <- function(filename) {
     #purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-#write_csv(pitch_data, 'pitch_data_clean.csv')
+#write_csv(pitch_data, 'pitch_data.csv')
     #We have saved it 
 
 ```
@@ -181,7 +181,7 @@ read_pitch <- function(filename) {
 
 ### Now you need to merge demographic/clinical, duration and pitch data
 
-```{r}
+```{r eval=FALSE}
 # Let's start with the demographic and clinical data
 demo <- read.csv('DemographicData.csv', sep = ';', header = T)
 
@@ -292,7 +292,6 @@ df <- df %>% mutate(
   Diagnosis = as.factor(df$Diagnosis),
   ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
   Gender = as.factor(df$Gender),
-  Age = as.factor(df$Age)
 )
 
 ```
@@ -303,9 +302,57 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-#We found that study 3 and 4 have no data for several of the demographic observations, as we don't use any of those columns with NA's, we decided to keep the observations 
+#We found that study 3 and 4 have no data for several of the clinical observations, 
+  #as we don't use any of those columns in the models, we decided to keep the observations 
 
-#Insert Nannas and Kristines data 
+#Overview of the dataset
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary) 
+
+#Descriptive statistics 
+  #Creating dataframe grouping by diagnosis
+report <- df
+
+  #Creating dataframe with only schizophrenics 
+Schizo <- subset(report, Diagnosis == "Schizophrenia")
+
+  #Sd and mean age schizophrenics
+summarize(Schizo, sd(Age), mean(Age))
+
+    #Only females
+schizo_fe <- subset(Schizo, Gender == "F")
+    #Only males 
+schizo_ma <- subset(Schizo, Gender == "M")
+
+  #Control dataframe 
+control <- subset(report, Diagnosis == "Control")
+  #removing na's
+control_Age <- na.omit(control)
+summarize(control_Age, sd(Age), mean(Age))
+
+  #Only females
+control_fe <- subset(control, Gender == "F")
+  #Only males 
+control_ma <- subset(control, Gender == "M")
+
+#Clinical features 
+  #Removing na's and thereby exluding study 3 and 4, since none of them has the clinical observations
+df_naomit <- na.omit(df) %>% group_by(Diagnosis)
+  #SANS
+summarize(df_naomit, sd(SANS), mean(SANS))
+  #SAPS
+summarize(df_naomit, sd(SAPS), mean(SAPS))
+  #VerbalIQ
+summarize(df_naomit, sd(VerbalIQ), mean(VerbalIQ))
+  #Non-verbalIQ
+summarize(df_naomit, sd(NonVerbalIQ), mean(NonVerbalIQ))
+
+#Making a t-test to see if the two groups are significantly independent 
+t.test(df$VerbalIQ ~ df$Diagnosis)
+
+t.test(df$NonVerbalIQ ~ df$Diagnosis)
+
 ```
 
 ## Now we can analyze the data
@@ -326,7 +373,6 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-
 #Making new columns for predictors
   #spoken time / duration 
         #making a column for proportion of spoken time 
@@ -338,6 +384,52 @@ df$pause_duration <- (df$dur..s. - df$phonationtime..s.) / df$npause
   #removing inf number when pause duration is 0 
 df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
+#Making plots to eyeball the data 
+
+#Pitch variability 
+
+ggplot(df, aes(x = Diagnosis, y = pitch_IQR, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#proportion of spoken time 
+
+ggplot(df, aes(x = Diagnosis, y = prop_spoken_time, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#Duration of Utterance 
+
+ggplot(df, aes(x = Diagnosis, y = phonationtime..s., fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#speech rate 
+
+ggplot(df, aes(x = Diagnosis, y = speechrate..nsyll.dur., fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#duration of pauses 
+ggplot(df, aes(x = Diagnosis, y = pause_duration, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#number of pauses 
+
+ggplot(df, aes(x = Diagnosis, y = npause, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+```
+
+
+```{r}
 
 #Scaling everything 
 
@@ -354,11 +446,6 @@ pitch_variability <- lmerTest::lmer(pitch_IQR ~ 0 + Diagnosis + (1|ID), df, REML
 
 proportion_spoken <- lmerTest::lmer(prop_spoken_time ~ 0 + Diagnosis + (1|ID), df, REML = FALSE)
 
-
-    #As it is unclear whether we had to have a proportion of spoken time or just spoken time as phonation time, we make two models 
-
-spoken <- lmerTest::lmer(df$phonationtime..s.~0 + Diagnosis + (1|ID), df, REML = FALSE )
-
   #speech rate
 
 speech_rate <- lmerTest::lmer(speechrate..nsyll.dur. ~ 0 + Diagnosis + (1|ID), df, REML = FALSE)
@@ -371,7 +458,6 @@ pause_duration <- lmerTest::lmer(pause_duration ~ 0 + Diagnosis + (1|ID), df, RE
 #Summaries 
 summary(pitch_variability)
 summary(proportion_spoken)
-summary(spoken)
 summary(speech_rate)
 summary(pause_duration)
 ```
