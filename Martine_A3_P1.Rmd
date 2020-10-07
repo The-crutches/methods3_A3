@@ -298,10 +298,8 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+#Loading data
 df <- read_csv("SchizophreniaData.csv")
-
-#Cleaning data 
-df <- na.omit(df)
 df <- df %>% mutate(
   Trial = as.factor(df$Trial),
   Study = as.factor(df$Study),
@@ -309,17 +307,9 @@ df <- df %>% mutate(
   Diagnosis = as.factor(df$Diagnosis),
   ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
   Gender = as.factor(df$Gender),
-  Age = as.factor(df$Age)
+  Age = as.factor(df$Age), 
+  Subject = as.factor(df$Subject)
 )
-
-#Counting participants, how many schizo and how many controls?
-df %>% 
-  split(df$Diagnosis) %>% 
-  map(summary) 
-#Gender, age, symptom severity 
-
-#Group by diagnosis and study 
-
 ```
 
 ## Now we can analyze the data
@@ -352,50 +342,46 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 ```
 
 
-```{r}
-
-   set.seed(1)
-   x <- runif(7)
-
-   # Manually scaling
-   (x - mean(x)) / sd(x)
-
-   scale(x)
-```
 
 ```{r}
 
-library(lme4)
-#Models to run 
-    #Syntax to use if we want to study the studies seperately 
-        #Feature ~ 0 + Study + Study:Diagnosis + [your randomEffects]
-df <- df %>% mutate_if(is.numeric, scale)
-#pitch variability
-
-pitch_variability <- lmerTest::lmer(pitch_IQR ~ 0 + Diagnosis + (1|ID), df)
-summary(pitch_variability)
-
-#proportion of spoken time
-    #spoken time / duration 
+#Making new columns for predictors
+  #spoken time / duration 
         #making a column for proportion of spoken time 
 df$prop_spoken_time <- df$phonationtime..s. / df$dur..s.
 
-proportion_spoken <- lmerTest::lmer(prop_spoken_time ~ 0 + Diagnosis + (1|ID), df)
-summary(proportion_spoken)
-
-#speech rate
-
-speech_rate <- lmerTest::lmer(speechrate..nsyll.dur. ~ 0 + Diagnosis + (1|ID), df)
-summary(speech_rate)
-
-#pause duration
-    #making new column with pause duration -> (Duration - Spoken Duration) / PauseN
+  #making new column with pause duration -> (Duration - Spoken Duration) / PauseN
 df$pause_duration <- (df$dur..s. - df$phonationtime..s.) / df$npause
 
-pause_duration <- lmerTest::lmer(pause_duration ~ 0 + Diagnosis + (1 | ID), df)
-summary(pause_duration)
+  #removing inf number when pause duration is 0 
+df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
-?cohen.d
+
+#Scaling everything 
+
+df <- df %>% mutate_if(is.numeric, scale)
+
+#Models to run 
+
+  #pitch variability
+
+pitch_variability <- lme4::lmer(pitch_IQR ~ 0 + Diagnosis + (1|ID), df)
+summary(pitch_variability)
+
+  #proportion of spoken time
+
+proportion_spoken <- lme4::lmer(prop_spoken_time ~ 0 + Diagnosis + (1|ID), df)
+summary(proportion_spoken)
+
+  #speech rate
+
+speech_rate <- lme4::lmer(speechrate..nsyll.dur. ~ 0 + Diagnosis + (1|ID), df)
+summary(speech_rate)
+
+  #pause duration
+
+pause_duration <- lme4::lmer(pause_duration ~ 0 + Diagnosis + (1|ID), df)
+summary(pause_duration)
 ```
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
 
