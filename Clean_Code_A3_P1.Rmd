@@ -115,7 +115,7 @@ See placeholder code here for help.
 ```{r}
 # Function to extract study, diagnosis, subject and trial from the file name + adding columns 
 read_pitch <- function(filename) {
-    # getting filenames and subsetting them
+    # getting filenames and subsetting the relevant parts
     files = path_file(path = filename) 
     
     for (file in filename){
@@ -184,12 +184,13 @@ read_pitch <- function(filename) {
 ```{r}
 # Let's start with the demographic and clinical data
 demo <- read.csv('DemographicData.csv', sep = ';', header = T)
-demo <- demo %>% 
-    rename(Subject = Participant) 
 
-#Removing observations that are not from the danish study
-demo <- demo%>% 
-    filter(Language == "Danish")
+demo <-demo[-c(387:391),]
+
+demo <- demo %>% 
+  filter(Study <= 4) %>% 
+  rename(Subject = Participant)
+
 
 # Then duration data
 art <- read.delim('Articulation.txt', sep = ',', header = T)
@@ -212,19 +213,19 @@ art <- art %>% mutate(
 art$soundname <- NULL
 
 #Removing observations that are not from the danish study
-art <- art %>% filter(
-    Study == 1 | Study == 2 | Study == 3 | Study == 4)
+art <- art %>% 
+  filter(Study <= 4, Subject != 342)
 
 # Finally the pitch data
 pitch <- read.csv('pitch_data_clean.csv')
 
 #Removing observations that are not from the danish study
-pitch <- pitch %>% filter(
-    Study == 1 | Study == 2 | Study == 3 | Study == 4)
+pitch <- pitch %>% 
+  filter(Study <= 4, Subject != 342)
 
 # Now we merge them
     # But first we make sure that everything is in the same class 
-
+ 
 #For demo
 demo <- demo %>% mutate(
     Study = as.factor(Study),
@@ -246,12 +247,37 @@ pitch <- pitch %>% mutate(
     Trial = as.factor(Trial))
 
 #Merging
-df1 <- merge(art, demo, all = T)
-df <- merge(df1, pitch, all = T)
-    #Getting 4492 observation of 38 variables 
-    #We have 3.826 files 
+demo$ID <- paste0(demo$Subject, demo$Diagnosis)
+art$ID <- paste0(art$Subject,art$Diagnosis)
+pitch$ID <- paste0(pitch$Subject, pitch$Diagnosis)
 
+  # create a surrogate key by adding trial to iD in a new column?
+# don't know if this is necessary or not
+art$ID2 <- paste0(art$Subject,art$Diagnosis, art$Trial)
+pitch$ID2 <- paste0(pitch$Subject, pitch$Diagnosis, pitch$Trial)
 
+#assesing that ID2 is unique
+x <- art %>% count(ID2) %>% filter(ID2 > 1) 
+y <- pitch %>% count(ID2) %>% filter(ID2 > 1) 
+
+#try both left join and full join to see what happens. 
+pitch_art <- pitch %>% 
+  left_join(art)
+
+pitch_art$Subject <- as.factor(pitch_art$Subject)
+
+df <- pitch_art %>% left_join(demo)
+
+#correcting final dataset classes
+df <- df %>% mutate(
+  Trial = as.factor(df$Trial),
+  Study = as.factor(df$Study),
+  ID = as.factor(df$ID),
+  Diagnosis = as.factor(df$Diagnosis),
+  ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
+  Gender = as.factor(df$Gender),
+  Age = as.factor(df$Age)
+)
 # Now we save them
 
 #write_csv(df, "SchizophreniaData.csv")
@@ -266,6 +292,11 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
+df <- na.omit(df)
+
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary) 
 
 ```
 
@@ -287,13 +318,15 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-   set.seed(1)
-   x <- runif(7)
 
-   # Manually scaling
-   (x - mean(x)) / sd(x)
+  #what predictors will fit in to the 4 categories?
+#pitch variability - all pitch values?
+#proportion of spoken time - 
+#speech rate - 
+#pause duration - n pause, 
 
-   scale(x)
+
+
 ```
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
