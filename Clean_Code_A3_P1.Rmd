@@ -217,7 +217,7 @@ art <- art %>%
   filter(Study <= 4, Subject != 342)
 
 # Finally the pitch data
-pitch <- read.csv('pitch_data_clean.csv')
+pitch <- read.csv('pitch_data.csv')
 
 #Removing observations that are not from the danish study
 pitch <- pitch %>% 
