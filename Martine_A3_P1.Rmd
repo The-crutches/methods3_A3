@@ -389,11 +389,13 @@ speech_rate <- lmerTest::lmer(speechrate..nsyll.dur. ~ 0 + Diagnosis + (1|ID), d
 summary(speech_rate)
 
 #pause duration
-    #makin new column with pause duration -> (Duration - Spoken Duration) / PauseN
+    #making new column with pause duration -> (Duration - Spoken Duration) / PauseN
 df$pause_duration <- (df$dur..s. - df$phonationtime..s.) / df$npause
 
 pause_duration <- lmerTest::lmer(pause_duration ~ 0 + Diagnosis + (1 | ID), df)
 summary(pause_duration)
+
+?cohen.d
 ```
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
 
