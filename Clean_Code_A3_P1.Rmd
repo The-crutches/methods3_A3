@@ -215,6 +215,7 @@ art <- art %>% mutate(
 art$soundname <- NULL
 
 #Removing observations that are not from the danish study
+  # Removing participant 342, because his files are registered with two trials in the same one
 art <- art %>% 
   filter(Study <= 4, Subject != 342)
 
@@ -263,7 +264,7 @@ pitch$ID2 <- paste0(pitch$Subject, pitch$Diagnosis, pitch$Trial)
 x <- art %>% count(ID2) %>% filter(ID2 > 1) 
 y <- pitch %>% count(ID2) %>% filter(ID2 > 1) 
 
-#try both left join and full join to see what happens. 
+#using left join to merge
 pitch_art <- pitch %>% 
   left_join(art)
 
@@ -337,7 +338,7 @@ control_fe <- subset(control, Gender == "F")
 control_ma <- subset(control, Gender == "M")
 
 #Clinical features 
-  #Removing na's and thereby exluding study 3 and 4, since none of them has the clinical observations
+  #Removing na's and thereby excluding study 3 and 4, since none of them has the clinical observations
 df_naomit <- na.omit(df) %>% group_by(Diagnosis)
   #SANS
 summarize(df_naomit, sd(SANS), mean(SANS))
