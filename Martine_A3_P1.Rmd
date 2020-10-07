@@ -307,9 +307,106 @@ df <- df %>% mutate(
   Diagnosis = as.factor(df$Diagnosis),
   ASD..speakingtime.nsyll. = as.numeric(df$ASD..speakingtime.nsyll.),
   Gender = as.factor(df$Gender),
-  Age = as.factor(df$Age), 
   Subject = as.factor(df$Subject)
 )
+```
+
+```{r}
+#Overview of the dataset
+df %>% 
+  split(df$Diagnosis) %>% 
+  map(summary) 
+
+#Descriptive statistics 
+  #Creating dataframe grouping by diagnosis
+report <- df
+
+  #Creating dataframe with only schizophrenics 
+Schizo <- subset(report, Diagnosis == "Schizophrenia")
+
+  #Sd and mean age schizophrenics
+summarize(Schizo, sd(Age), mean(Age))
+
+    #Only females
+schizo_fe <- subset(Schizo, Gender == "F")
+    #Only males 
+schizo_ma <- subset(Schizo, Gender == "M")
+
+  #Control dataframe 
+control <- subset(report, Diagnosis == "Control")
+  #removing na's
+control_Age <- na.omit(control)
+summarize(control_Age, sd(Age), mean(Age))
+
+  #Only females
+control_fe <- subset(control, Gender == "F")
+  #Only males 
+control_ma <- subset(control, Gender == "M")
+
+#Clinical features 
+  #Removing na's and thereby exluding study 3 and 4, since none of them has the clinical observations
+df_naomit <- na.omit(df) %>% group_by(Diagnosis)
+  #SANS
+summarize(df_naomit, sd(SANS), mean(SANS))
+  #SAPS
+summarize(df_naomit, sd(SAPS), mean(SAPS))
+  #VerbalIQ
+summarize(df_naomit, sd(VerbalIQ), mean(VerbalIQ))
+  #Non-verbalIQ
+summarize(df_naomit, sd(NonVerbalIQ), mean(NonVerbalIQ))
+
+#Making a t-test to see if the two groups are significantly independent 
+t.test(df$VerbalIQ ~ df$Diagnosis)
+
+t.test(df$NonVerbalIQ ~ df$Diagnosis)
+
+```
+
+
+```{r}
+#Plots 
+
+#Pitch variability 
+
+ggplot(df, aes(x = Diagnosis, y = pitch_IQR, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#proportion of spoken time 
+
+ggplot(df, aes(x = Diagnosis, y = prop_spoken_time, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#Duration of Utterance 
+
+ggplot(df, aes(x = Diagnosis, y = phonationtime..s., fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#speech rate 
+
+ggplot(df, aes(x = Diagnosis, y = speechrate..nsyll.dur., fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#duration of pauses 
+ggplot(df, aes(x = Diagnosis, y = pause_duration, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
+#number of pauses 
+
+ggplot(df, aes(x = Diagnosis, y = npause, fill = Diagnosis)) +
+ geom_bar(stat = "summary", fun.y = mean)+
+  geom_errorbar(stat = "summary", fun.data = mean_se)
+
+
 ```
 
 ## Now we can analyze the data
@@ -382,6 +479,8 @@ summary(speech_rate)
 
 pause_duration <- lme4::lmer(pause_duration ~ 0 + Diagnosis + (1|ID), df)
 summary(pause_duration)
+
+
 ```
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
 
