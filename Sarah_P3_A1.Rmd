@@ -173,7 +173,7 @@ pitch_data <- list.files(path = 'Pitch/', pattern = '.txt', all.files = T, full.
     purrr::map_df(read_pitch)
 
 # save the new dataset as a csv file
-write_csv(pitch_data, 'pitch_data_clean.csv')
+write_csv(pitch_data, 'pitch_data.csv')
 ```
 
 
@@ -267,6 +267,27 @@ df$ID2 <- NULL
 
 ```
 
+```{r}
+
+ggplot(df, aes(x = Diagnosis, y = pause_duration, colour = Diagnosis)) +
+  geom_boxplot(width = 0.5) +
+  ggtitle("xxxx")+
+  stat_summary(fun.y = mean, geom = "point", shape = 23, colour = "Black")
+
+ggplot(df, aes(x = Diagnosis, y = prop_spoken_time, colour = Diagnosis)) +
+  geom_boxplot(width = 0.5) +
+  ggtitle("xxxx")+
+  stat_summary(fun.y = mean, geom = "point", shape = 23, colour = "Black")
+
+ggplot(df, aes(x = Diagnosis, y = speechrate..nsyll.dur., colour = Diagnosis)) +
+  geom_boxplot(width = 0.5) +
+  ggtitle("xxxx")+
+  stat_summary(fun.y = mean, geom = "point", shape = 23, colour = "Black")
+
+ggplot(df, aes(x = Diagnosis, y = pitch_IQR, colour = Diagnosis)) +
+  geom_jitter()
+```
+
 ## Now we need to describe our sample
 
 First look at the missing data: we should exclude all recordings for which we do not have complete data.
@@ -275,14 +296,8 @@ Finally, do the same by diagnosis and study, to assess systematic differences in
 I like to use group_by() %>% summarize() for quick summaries
 
 ```{r}
-df2 <- df
-#df <- df %>% fill(SANS) 
-df <- na.omit(df2)
-#can fill in data, but not sure if it makes sense?
-?fill()
-
-df %>% split(df$Diagnosis) %>% map(summary) 
-
+desc <- df %>% split(df$Diagnosis) %>% map(summary) 
+desc
 
 ```
 
@@ -304,9 +319,16 @@ N.N.N.B. If you want to estimate the studies separately, you can try this syntax
 - Bonus points: cross-validate the models and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
 
 ```{r}
-p_load(tidymodels)
+p_load(tidymodels, lme4, tidyverse, EMAtools)
 
-#pitch variability - all pitch values?
+df <- df %>% mutate_if(is.numeric, scale)
+
+m1 <- lme4::lmer(pitch_IQR ~ 0 + Diagnosis:Study + (1|ID), data = df)
+summary(m1)
+
+k <- lme.dscore(m1, data = df, type = 'lme4')
+l
+#pitch variability - all pitch values? pitchIQR, cv
 #proportion of spoken time - 
 #speech rate - 
 #pause duration - n pause, 
@@ -325,30 +347,52 @@ m_split %>% training() %>% glimpse()
 
 test <- m_split %>% testing() %>% glimpse()
 
-m_recipe <- training(m_split) %>%
-  recipe(Diagnosis ~.) %>%
+df1 <- df %>% 
   step_corr(all_numeric()) %>%
   step_center(all_numeric(), -all_outcomes()) %>%
   step_scale(all_numeric(), -all_outcomes()) %>%
-  step_dummy(all_nominal()) %>% 
-  prep(retain = TRUE)
-
-m_recipe <- m_recipe %>% prep(retain = TRUE)
-
-#prep(retain = TRUE)
-?prep()
-m_recipe
+  step_dummy(all_nominal())
+  
+prep(retain = TRUE)
 
 
 testing_r <- m_recipe %>% bake(testing(m_split))
 training_r <- bake(m_recipe, new_data = m)
 
 
-glimpse(test_set)
-
 juiced_training <- juice(training_r) 
 
 ```
+
+
+```{r}
+
+pitch_variability <- lmerTest::lmer(pitch_IQR ~ 0 + Diagnosis + (1|ID), df)
+summary(pitch_variability)
+
+#proportion of spoken time
+    #spoken time / duration 
+        #making a column for proportion of spoken time 
+df$prop_spoken_time <- df$phonationtime..s. / df$dur..s.
+
+proportion_spoken <- lmerTest::lmer(prop_spoken_time ~ 0 + Diagnosis + (1|ID), df)
+summary(proportion_spoken)
+
+#speech rate
+
+speech_rate <- lmerTest::lmer(speechrate..nsyll.dur. ~ 0 + Diagnosis + (1|ID), df)
+summary(speech_rate)
+
+#pause duration
+    #makin new column with pause duration -> (Duration - Spoken Duration) / PauseN
+df$pause_duration <- (df$dur..s. - df$phonationtime..s.) / df$npause
+
+pause_duration <- lmerTest::lmer(pause_duration ~ 0 + Diagnosis + (1 | ID), df)
+summary(pause_duration)
+
+```
+
+
 
 ## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
 
