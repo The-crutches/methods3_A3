@@ -47,9 +47,10 @@ df <- df %>% mutate(Diagnosis = factor(Diagnosis),
                     Trial = factor(Trial),
                     ID = factor(ID),
                     Gender = factor(Gender),
-                    Age = factor(Age)
+                    Age = factor(Age),
+                    speechrate = speechrate..nsyll.dur.
                     ) %>% 
-  select(- Language, - time, - f0) %>%
+  select(- Language, - time, - f0, - speechrate..nsyll.dur.) %>%
   select(ID, ID2, Subject, Study, Trial, Gender, Age, everything())
 
 
@@ -75,17 +76,17 @@ df %>% ggplot(aes(Diagnosis, pause_duration)) + geom_point()
 
 ```
 
-
+apply feature selection techniques?
 
 ```{r}
-# find the one best feature
+# find the one best feature from part 1
 
-m1 <- glmer(Diagnosis1 ~ time_mean + (1|ID), family = 'binomial', df)
-m2 <- glmer(Diagnosis1 ~ pitch_mean + (1|ID), family = 'binomial', df)
+m1 <- glmer(Diagnosis1 ~ speechrate..nsyll.dur. + (1|ID), family = 'binomial', df)
 summary(m1)
 
+?predict()
 
-pred_probs <- predict(m1, type = 'response')
+pred_probs <- predict(m1, type = 'response', re.form = NA)
 actual_value <- df$Diagnosis
 
 d <- tibble(pred_probs, actual_value)
@@ -94,13 +95,17 @@ d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  a
 
 
 confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
-confusionMatrix(d = d$pred_category, reference = d$actual_value, positive = 'Schizophrenia')
 
-
-?confusionMatrix
 
 # find the performance measures 
 
+
+```
+
+find the best combination of features
+best model
+
+```{r}
 
 ```
 
@@ -111,26 +116,28 @@ Then cross-validate the logistic regression and re-calculate performance on the 
 # tweak???
 #cross validate the model
 ## function from last time
+
+
 cross_validate <- function(data, k, mod){
-folds = createFolds(unique(train_data$Child.ID), k = k, list = TRUE, returnTrain = FALSE)
+folds = createFolds(unique(df$ID), k = k, list = TRUE, returnTrain = FALSE)
 trainRMSE_new= rep(NA, k)
 testRMSE_new = rep(NA, k)
 i = 1
 for (fold in folds){
-  train = subset(train_data, !(Child.ID %in% fold))
-  test = subset(train_data, Child.ID %in% fold)
-  model = lmer(mod, train)
+  train = subset(df, !(ID %in% fold))
+  test = subset(df, ID %in% fold)
+  model = glmer(mod, train, family = 'binomial')
   test$prediction = predict(model, test, allow.new.levels = TRUE)
   train$prediction = fitted(model)
-  trainRMSE_new[i] = RMSE(train$CHI_MLU, fitted(model))
-  testRMSE_new[i] = RMSE(test$CHI_MLU, test$prediction)
+  trainRMSE_new[i] = RMSE(train$pause_duration, fitted(model))
+  testRMSE_new[i] = RMSE(test$pause_duration, test$prediction)
   i = i + 1
 }
 result = data.frame(trainRMSE, testRMSE)
   return(result)
 }
 
-cross_validate()
+x <- cross_validate(df, 10, m1)
 
 # recalculate performance measures
 
