@@ -15,7 +15,6 @@ In the previous part of the assignment you generated a bunch of "features", that
 We now want to know whether we can automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
 Again, remember that the dataset containst 7 studies and 3 languages. Feel free to only include Danish (Study 1-4) if you feel that adds too much complexity.
 
-
 Issues to be discussed your report:
 - Should you run the analysis on all languages/studies at the same time? 
 - Choose your best acoustic feature from part 1. How well can you diagnose schizophrenia just using it?
@@ -33,7 +32,16 @@ https://machinelearningmastery.com/machine-learning-ensembles-with-r/
 
 ### Let's start
 
-load packages and data
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+
+
 
 ```{r}
 library(pacman)
@@ -66,6 +74,7 @@ df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
 ```
 
 
+
 We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
 
 ```{r}
@@ -76,15 +85,19 @@ df %>% ggplot(aes(Diagnosis, pause_duration)) + geom_point()
 
 ```
 
-apply feature selection techniques?
+
 
 ```{r}
-# find the one best feature from part 1
+# find the one best feature
 
-m1 <- glmer(Diagnosis1 ~ speechrate..nsyll.dur. + (1|ID), family = 'binomial', df)
+# use the speech rate from part 1
+
+#afterwards, find the best combination
+
+m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
+m2 <- glmer(Diagnosis1 ~ pitch_mean + (1|ID), family = 'binomial', df)
 summary(m1)
 
-?predict()
 
 pred_probs <- predict(m1, type = 'response', re.form = NA)
 actual_value <- df$Diagnosis
@@ -95,17 +108,16 @@ d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  a
 
 
 confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
+confusionMatrix(d = d$pred_category, reference = d$actual_value, positive = 'Schizophrenia')
 
+
+?confusionMatrix
 
 # find the performance measures 
 
+library(groupdata2)
+df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
 
-```
-
-find the best combination of features
-best model
-
-```{r}
 
 ```
 
@@ -116,32 +128,61 @@ Then cross-validate the logistic regression and re-calculate performance on the 
 # tweak???
 #cross validate the model
 ## function from last time
-
-
 cross_validate <- function(data, k, mod){
-folds = createFolds(unique(df$ID), k = k, list = TRUE, returnTrain = FALSE)
+folds = createFolds(unique(train_data$Child.ID), k = k, list = TRUE, returnTrain = FALSE)
 trainRMSE_new= rep(NA, k)
 testRMSE_new = rep(NA, k)
 i = 1
 for (fold in folds){
-  train = subset(df, !(ID %in% fold))
-  test = subset(df, ID %in% fold)
-  model = glmer(mod, train, family = 'binomial')
+  train = subset(train_data, !(Child.ID %in% fold))
+  test = subset(train_data, Child.ID %in% fold)
+  model = lmer(mod, train)
   test$prediction = predict(model, test, allow.new.levels = TRUE)
   train$prediction = fitted(model)
-  trainRMSE_new[i] = RMSE(train$pause_duration, fitted(model))
-  testRMSE_new[i] = RMSE(test$pause_duration, test$prediction)
+  trainRMSE_new[i] = RMSE(train$CHI_MLU, fitted(model))
+  testRMSE_new[i] = RMSE(test$CHI_MLU, test$prediction)
   i = i + 1
 }
 result = data.frame(trainRMSE, testRMSE)
   return(result)
 }
 
-x <- cross_validate(df, 10, m1)
+cross_validate()
+
+
+
+df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
 
 # recalculate performance measures
 
 
+```
+
+
+```{r}
+
+dff <- data.frame(df$speechrate, df$pause_duration, df$prop_spoken_time, df$pitch_IQR)
+round(cor(dff),
+  digits = 2 # rounded to 2 decimals
+)
+
+# speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
+
+f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df)
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f0, f1, f2, f3)
+
+# f2 is the best model when comparing AIC and BIC
+
+
+
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f5 <- glmer(Diagnosis1 ~ speechrate*pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f2, f5)
 ```
 
 
@@ -156,74 +197,6 @@ N.N.B. you need to decide whether calculate performance on each single test fold
 
 N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
 N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
-
-
-
-
-
-
-```{r}
-
-#for parallel processing
-doParallel::registerDoParallel()
-
-
-set.seed(123)
-
-df_model <- df %>% select(ID, Diagnosis, pitch_mean, pitch_sd, pitch_IQR, pause_duration, prop_spoken_time)
-
-#collinearity?
-a <-cor(df_model %>% select_if(is.numeric))
-a <- as.data.frame(a)
-autoplot(a)
-
-#test and train set
-df_split <- initial_split(df_model, strata = Diagnosis)
-df_train <- training(df_split)
-df_test <- testing(df_split)
-
-#creating model specs
-glm_spec <- logistic_reg() %>% 
-  set_engine('glmer')
-
-rf_spec <- rand_forest() %>% 
-  set_mode('classification') %>% 
-  set_engine('ranger')
-
-
-#creating a workflow
-devtools::install_github("tidymodels/multilevelmod")
-
-p_load(multilevelmod)
-# seems like we need this package, which is currently udner development and not het released-
-
-
-wf <- workflow() %>% 
-  add_recipe(recipe(Diagnosis ~ pause_duration, data = df_model)) %>% 
-  add_model(glm_spec, formula = glmer(Diagnosis ~ pause_duration + (1|ID), family = 'binomial', data = df_model))
-                                                                                                   
-                                                                                            
-glm_result <- wf %>% 
-  add_model(glm_spec) %>% 
-  fit(data = df_train)
-
-glm_result
-
-
-rf_result <- wf %>% 
-  add_model(rf_spec) %>% 
-  fit(data = df_train)
-
-rf_result
-
-#evaluate model
-
-glm_result %>% 
-
-```
-
-
-
 
 
 
