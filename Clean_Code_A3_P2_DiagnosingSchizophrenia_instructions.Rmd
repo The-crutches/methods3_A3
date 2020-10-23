@@ -35,7 +35,7 @@ https://machinelearningmastery.com/machine-learning-ensembles-with-r/
 ```{r}
 #Loading packages
 library(pacman)
-p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed)
+p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed, groupdata2)
 
 #Reading data 
 df <- read_csv('SchizophreniaData.csv')
@@ -47,7 +47,8 @@ df <- df %>% mutate(Diagnosis = factor(Diagnosis),
                     Trial = factor(Trial),
                     ID = factor(ID),
                     Gender = factor(Gender),
-                    Age = factor(Age)
+                    Age = factor(Age), 
+                    speechrate = speechrate..nsyll.dur.
                     ) %>% 
   #Removing language, time and f0 because we dont use them 
   select(- Language, - time, - f0) %>%
@@ -97,6 +98,8 @@ confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
 
 ```{r}
 #Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression
+
+m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
 ```
 
 
