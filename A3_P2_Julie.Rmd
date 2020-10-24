@@ -32,83 +32,9 @@ https://machinelearningmastery.com/machine-learning-ensembles-with-r/
 
 ### Let's start
 
-```{r}
-#Loading packages
-library(pacman)
-p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed, groupdata2)
-
-#Reading data 
-df <- read_csv('SchizophreniaData.csv')
-
-#Cleaning data 
-df <- df %>% mutate(Diagnosis = factor(Diagnosis),
-                    Study = factor(Study),
-                    Subject = factor(Subject),
-                    Trial = factor(Trial),
-                    ID = factor(ID),
-                    Gender = factor(Gender),
-                    Age = factor(Age), 
-                    speechrate = speechrate..nsyll.dur.
-                    ) %>% 
-  #Removing language, time and f0 because we dont use them 
-  select(- Language, - time, - f0) %>%
-  #Organizing the dataframe
-  select(ID, ID2, Subject, Study, Trial, Gender, Age, everything())
-
-#Making the pause duration column and proportion of spoken time column
-df <- df %>% mutate(prop_spoken_time = phonationtime..s. / dur..s.,
-                    pause_duration = (dur..s. - phonationtime..s.) / npause,)
-
-#Cleaning the pause duration column
-df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
-
-#Scaling the whole dataframe
-df <- df %>% mutate_if(is.numeric, scale)
-
-#Making a new column for diagnosis if it is needed in some of the analysis 
-df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
-
-```
-
 We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
-```{r}
-#Building logistic regression 
-  #Using speech rate as predictor because it is our best feature from part 1 
-m1 <- glmer(Diagnosis1 ~ speechrate..nsyll.dur. + (1|ID), family = 'binomial', df)
-summary(m1)
-
-#How well can you diagnose schizophrenia just using it?
-
-#Creating predicted column 
-pred_probs <- predict(m1, type = 'response', re.form = NA)
-
-#Actual values
-actual_value <- df$Diagnosis
-
-#Creating tible
-d <- tibble(pred_probs, actual_value)
-
-#Making the predicted either Schizophrenia or Control
-d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  as.factor()
-
-#Then confusion matrix 
-confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
-  #It is very bad
-```
-
-```{r}
-#Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression
-
-m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
-```
-
 
 Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
-
-```{r}
-#Cross validation of the the logistic regression from the best features 
-```
-
 
 N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
 N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
@@ -116,6 +42,161 @@ N.N.N.B. Now you have two levels of structure: subject and study. Should this im
 N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
 
 
+
+```{r}
+library(pacman)
+p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed)
+
+df <- read_csv('SchizophreniaData.csv')
+
+df <- df %>% mutate(Diagnosis = factor(Diagnosis),
+                    Study = factor(Study),
+                    Subject = factor(Subject),
+                    Trial = factor(Trial),
+                    ID = factor(ID),
+                    Gender = factor(Gender),
+                    Age = factor(Age),
+                    speechrate = speechrate..nsyll.dur.
+                    ) %>% 
+  select(- Language, - time, - f0, - speechrate..nsyll.dur.) %>%
+  select(ID, ID2, Subject, Study, Trial, Gender, Age, everything())
+
+
+df <- df %>% mutate(prop_spoken_time = phonationtime..s. / dur..s.,
+                    pause_duration = (dur..s. - phonationtime..s.) / npause,)
+
+df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
+
+df <- df %>% mutate_if(is.numeric, scale)
+
+df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
+
+```
+
+
+
+We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
+```{r}
+#explore data and visualize
+
+df %>% ggplot(aes(Diagnosis, pause_duration)) + geom_point() 
+
+
+```
+
+
+
+```{r}
+# find the one best feature
+
+# use the speech rate from part 1
+
+#afterwards, find the best combination
+
+m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
+m2 <- glmer(Diagnosis1 ~ pitch_mean + (1|ID), family = 'binomial', df)
+summary(m1)
+
+
+pred_probs <- predict(m1, type = 'response', re.form = NA)
+actual_value <- df$Diagnosis
+
+d <- tibble(pred_probs, actual_value)
+
+d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  as.factor()
+
+
+confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
+confusionMatrix(d = d$pred_category, reference = d$actual_value, positive = 'Schizophrenia')
+
+
+?confusionMatrix
+
+# find the performance measures 
+
+library(groupdata2)
+df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
+
+
+```
+
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+
+```{r}
+# tweak???
+#cross validate the model
+## function from last time
+cross_validate <- function(data, k, mod){
+folds = createFolds(unique(train_data$Child.ID), k = k, list = TRUE, returnTrain = FALSE)
+trainRMSE_new= rep(NA, k)
+testRMSE_new = rep(NA, k)
+i = 1
+for (fold in folds){
+  train = subset(train_data, !(Child.ID %in% fold))
+  test = subset(train_data, Child.ID %in% fold)
+  model = lmer(mod, train)
+  test$prediction = predict(model, test, allow.new.levels = TRUE)
+  train$prediction = fitted(model)
+  trainRMSE_new[i] = RMSE(train$CHI_MLU, fitted(model))
+  testRMSE_new[i] = RMSE(test$CHI_MLU, test$prediction)
+  i = i + 1
+}
+result = data.frame(trainRMSE, testRMSE)
+  return(result)
+}
+
+cross_validate()
+
+
+
+df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
+
+# recalculate performance measures
+
+
+```
+
+
+```{r}
+
+dff <- data.frame(df$speechrate, df$pause_duration, df$prop_spoken_time, df$pitch_IQR)
+round(cor(dff),
+  digits = 2 # rounded to 2 decimals
+)
+
+# speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
+
+f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df)
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f0, f1, f2, f3)
+
+# f2 is the best model when comparing AIC and BIC
+
+
+
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f5 <- glmer(Diagnosis1 ~ speechrate*pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f2, f5)
+```
+
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+
+```{r}
+#calculate for each fold or overall?
+
+```
+
+
+N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
 
 
 
