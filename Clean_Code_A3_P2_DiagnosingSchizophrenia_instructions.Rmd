@@ -35,7 +35,7 @@ https://machinelearningmastery.com/machine-learning-ensembles-with-r/
 ```{r}
 #Loading packages
 library(pacman)
-p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed, groupdata2)
+p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed, groupdata2, cvms)
 
 #Reading data 
 df <- read_csv('SchizophreniaData.csv')
@@ -107,7 +107,37 @@ Then cross-validate the logistic regression and re-calculate performance on the 
 
 ```{r}
 #Cross validation of the the logistic regression from the best features 
+
+#set seed to get repeatable results
+#create folds and add them to the dataset
+set.seed(5)
+new <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+
+#create the function from package cvms in order to crossvalidate
+glm_model_fn <- function(train_data, formula, hyperparameters) {
+  glm(formula = formula, data = train_data, family = "binomial")
+}
+
+glm_predict_fn <- function(test_data, model, formula,
+                           hyperparameters, train_data) {
+  stats::predict(
+    object = model,
+    newdata = test_data,
+    type = "response",
+    allow.new.levels = TRUE
+  )
+}
+
+cv <- cross_validate_fn(data = new, 
+                  model_fn = glm_model_fn, 
+                  predict_fn = glm_predict_fn, 
+                  formulas = "Diagnosis ~ speechrate", 
+                  type ='binomial', 
+                  fold_cols = ".folds", 
+                  positive = 1) %>% as.data.frame()
+
 ```
+
 
 
 N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
