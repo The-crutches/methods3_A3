@@ -37,7 +37,7 @@ load packages and data
 
 ```{r}
 library(pacman)
-p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, broom.mixed)
+p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, cvms, groupdata2)
 
 df <- read_csv('SchizophreniaData.csv')
 
@@ -61,7 +61,7 @@ df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
 df <- df %>% mutate_if(is.numeric, scale)
 
-df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
+df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1) %>% as.factor()
 
 ```
 
@@ -81,10 +81,13 @@ apply feature selection techniques?
 ```{r}
 # find the one best feature from part 1
 
-m1 <- glmer(Diagnosis1 ~ speechrate..nsyll.dur. + (1|ID), family = 'binomial', df)
+m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
+m3 <- glm(Diagnosis ~ speechrate, family = 'binomial', df)
 summary(m1)
 
-?predict()
+tidy(m1)
+tidy(m3)
+
 
 pred_probs <- predict(m1, type = 'response', re.form = NA)
 actual_value <- df$Diagnosis
@@ -95,6 +98,8 @@ d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  a
 
 
 confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
+
+confusionMatrix(predict(m1) > 0.5, as.logical(df$Diagnosis1))
 
 
 # find the performance measures 
@@ -113,31 +118,82 @@ best model
 Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
 
 ```{r}
-# tweak???
-#cross validate the model
-## function from last time
 
+# other method
+p_load(groupdata2)
 
-cross_validate <- function(data, k, mod){
-folds = createFolds(unique(df$ID), k = k, list = TRUE, returnTrain = FALSE)
-trainRMSE_new= rep(NA, k)
-testRMSE_new = rep(NA, k)
-i = 1
-for (fold in folds){
-  train = subset(df, !(ID %in% fold))
-  test = subset(df, ID %in% fold)
-  model = glmer(mod, train, family = 'binomial')
-  test$prediction = predict(model, test, allow.new.levels = TRUE)
-  train$prediction = fitted(model)
-  trainRMSE_new[i] = RMSE(train$pause_duration, fitted(model))
-  testRMSE_new[i] = RMSE(test$pause_duration, test$prediction)
-  i = i + 1
-}
-result = data.frame(trainRMSE, testRMSE)
-  return(result)
+#set seed here=?
+
+set.seed(5)
+
+new <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+
+glm_model_fn <- function(train_data, formula, hyperparameters) {
+  glm(formula = formula, data = train_data, family = "binomial")
 }
 
-x <- cross_validate(df, 10, m1)
+glm_predict_fn <- function(test_data, model, formula,
+                           hyperparameters, train_data) {
+  stats::predict(
+    object = model,
+    newdata = test_data,
+    type = "response",
+    allow.new.levels = TRUE
+  )
+}
+
+cross_validate_fn(data = new, 
+                  model_fn = glm_model_fn, 
+                  predict_fn = glm_predict_fn, 
+                  formulas = "Diagnosis ~ speechrate", 
+                  type ='binomial', 
+                  fold_cols = ".folds", 
+                  positive = 1)
+
+?cross_validate
+
+#don't think this works for mixed effects, no telling it that id is unique
+
+cv_model1 <- train(
+  Diagnosis ~ speechrate, 
+  data = df, 
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "cv", number = 10)
+)
+
+cv_model2 <- train(
+  Diagnosis ~ pause_duration, 
+  data = df, 
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "cv", number = 10)
+)
+
+summary(resamples(list(model1 = cv_model1, model2 = cv_model2)))$statistics$Accuracy
+
+pred_class <- predict(cv_model1, df)
+
+confusionMatrix(
+  data = relevel(pred_class, ref = "Schizophrenia"), 
+  reference = relevel(df$Diagnosis, ref = "Schizophrenia")
+)
+
+
+
+set.seed(123)
+cv_model_pls <- train(
+  Diagnosis ~ ., 
+  data = df_model, 
+  method = "pls",
+  family = "binomial",
+  trControl = trainControl(method = "cv", number = 10),
+  preProcess = c("zv", "center"),
+  tuneLength = 16
+)
+
+# Model with lowest RMSE
+cv_model_pls$bestTune
 
 # recalculate performance measures
 
@@ -170,7 +226,7 @@ doParallel::registerDoParallel()
 
 set.seed(123)
 
-df_model <- df %>% select(ID, Diagnosis, pitch_mean, pitch_sd, pitch_IQR, pause_duration, prop_spoken_time)
+df_model <- df %>% select(Diagnosis, pitch_mean, pitch_sd, pitch_IQR, pause_duration, prop_spoken_time, speechrate)
 
 #collinearity?
 a <-cor(df_model %>% select_if(is.numeric))
