@@ -119,6 +119,8 @@ anova(f0, f1, f2, f3)
 f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
 f5 <- glmer(Diagnosis1 ~ speechrate*pitch_IQR + (1|ID), family = 'binomial', df)
 
+
+
 anova(f2, f5)
 ```
 
@@ -164,8 +166,6 @@ N.B. the predict() function generates log odds (the full scale between minus and
 N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
 N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
 N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
-
-
 
 
 
