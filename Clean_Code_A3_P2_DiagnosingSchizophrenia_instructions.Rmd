@@ -100,7 +100,29 @@ confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
 ```{r}
 #Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression
 
-m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
+dff <- data.frame(df$speechrate, df$pause_duration, df$prop_spoken_time, df$pitch_IQR)
+# Looking for correlation
+round(cor(dff),
+  digits = 2 # rounded to 2 decimals
+)
+
+# speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
+
+f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df)
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f0, f1, f2, f3)
+
+# f2 is the best model when comparing AIC and BIC
+
+
+
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
+f5 <- glmer(Diagnosis1 ~ speechrate*pitch_IQR + (1|ID), family = 'binomial', df)
+
+anova(f2, f5)
 ```
 
 
