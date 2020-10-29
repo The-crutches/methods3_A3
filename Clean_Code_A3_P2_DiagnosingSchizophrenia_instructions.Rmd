@@ -62,9 +62,6 @@ df <- df %>% mutate(prop_spoken_time = phonationtime..s. / dur..s.,
 #Cleaning the pause duration column
 df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
-#Scaling the whole dataframe
-df <- df %>% mutate_if(is.numeric, scale)
-
 #Making a new column for diagnosis if it is needed in some of the analysis 
 df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
 
