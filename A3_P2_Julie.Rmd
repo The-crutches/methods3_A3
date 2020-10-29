@@ -162,6 +162,7 @@ df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
 ```{r}
 
 dff <- data.frame(df$speechrate, df$pause_duration, df$prop_spoken_time, df$pitch_IQR)
+# Looking for correlation
 round(cor(dff),
   digits = 2 # rounded to 2 decimals
 )
@@ -190,7 +191,19 @@ N.B. the predict() function generates log odds (the full scale between minus and
 N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
 
 ```{r}
+p_load(cvms)
+library(groupdata2)    # fold()
+library(dplyr)
+library(knitr)         # kable() : formats the output as a table
+library(e1071)         # svm()
+
+set.seed(1)
+```
+
+
+```{r}
 #calculate for each fold or overall?
+df <- fold(df, k =5, cat_col = "Diagnosis", id_co = "ID") %>%  arrange(.folds)
 
 ```
 
