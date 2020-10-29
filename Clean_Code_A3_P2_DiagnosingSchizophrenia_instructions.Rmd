@@ -71,10 +71,11 @@ df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
 ```
 
 We first want to build a logistic regression to see whether you can diagnose schizophrenia from your best acoustic feature. Let's use the full dataset and calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve). You need to think carefully as to how we should (or not) use study and subject ID.
+
 ```{r}
 #Building logistic regression 
   #Using speech rate as predictor because it is our best feature from part 1 
-m1 <- glmer(Diagnosis1 ~ speechrate..nsyll.dur. + (1|ID), family = 'binomial', df)
+m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
 summary(m1)
 
 #How well can you diagnose schizophrenia just using it?
