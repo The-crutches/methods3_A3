@@ -52,6 +52,7 @@ df <- df %>% mutate(Diagnosis = factor(Diagnosis),
                     ) %>% 
   #Removing language, time and f0 because we dont use them 
   select(- Language, - time, - f0) %>%
+  select(!starts_with("time")) %>% 
   #Organizing the dataframe
   select(ID, ID2, Subject, Study, Trial, Gender, Age, everything())
 
@@ -93,22 +94,37 @@ d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  a
 confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
   #It is very bad
 ```
+```{r}
+#Making dataframe with only the predictors we are interested 
+dff <- df %>% select(Diagnosis1, ID, speechrate, pause_duration, prop_spoken_time, pitch_IQR)
+
+#Partitioning 
+p1 <- partition(dff, p = 0.2, cat_col = 'Diagnosis1', id_col = 'ID')
+  #Making test set 
+df_test <- p1[[1]]
+  #Making train set 
+df_train <- p1[[2]]
+
+#Scaling data 
+df_train <- df_train %>% mutate_if(is.numeric, scale)
+
+#looking at correlations
+a <-cor(df_train %>% 
+          select_if(is.numeric))
+  #Making correlations as matrix
+a <- as.data.frame(a)
+  #Speechrate and prop of spoken time = correlated
+```
 
 ```{r}
 #Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression
 
-dff <- data.frame(df$speechrate, df$pause_duration, df$prop_spoken_time, df$pitch_IQR)
-# Looking for correlation
-round(cor(dff),
-  digits = 2 # rounded to 2 decimals
-)
-
 # speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
 
-f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
-f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df)
-f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
-f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', df)
+f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', dff)
+f1 <- glmer(dffgnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', dff)
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', dff)
+f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', dff)
 
 anova(f0, f1, f2, f3)
 
