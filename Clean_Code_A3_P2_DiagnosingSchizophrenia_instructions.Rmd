@@ -113,15 +113,6 @@ f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial
 anova(f0, f1, f2, f3)
 
 # f2 is the best model when comparing AIC and BIC
-
-
-
-f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df)
-f5 <- glmer(Diagnosis1 ~ speechrate*pitch_IQR + (1|ID), family = 'binomial', df)
-
-
-
-anova(f2, f5)
 ```
 
 
