@@ -64,7 +64,7 @@ df <- df %>% mutate(prop_spoken_time = phonationtime..s. / dur..s.,
 df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
 #Making a new column for diagnosis if it is needed in some of the analysis 
-df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1)
+df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1) %>% as.factor()
 
 ```
 
@@ -163,6 +163,7 @@ clf_svm_model_fn <- function(train_data, formula, hyperparameters) {
 
 
 ```{r}
+df_test <- df_test %>% mutate_if(is.numeric, scale)
 # Predict function for binomial SVM
 bnml_svm_predict_fn <- function(test_data, model, formula, hyperparameters, train_data) {
   # Predict test set
@@ -224,12 +225,12 @@ This model used a linear kernel to fit the support vectors and a cost of 1.
 
 ```{r}
 # correcting our test data so that is is also scaled and selecting the appropiate columns
-df_test <- df_test %>% mutate_if(is.numeric, scale)
 df_test <- df_test %>% select(ID, Diagnosis, Diagnosis1, speechrate, pause_duration, pitch_IQR, prop_spoken_time)
 
 # we run m1 again to have everything here
 m1 <- clf_svm_model_fn(train_data = df_train, formula = Diagnosis1 ~ speechrate + pitch_IQR, 
                        hyperparameters = list("kernel" = "linear"))
+summary(m1)
 
 # here we get the predictions on our test data, using m1
 pred_svm <- bnml_svm_predict_fn(test_data = df_test, model = m1)
