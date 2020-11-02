@@ -94,12 +94,10 @@ d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  a
 confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
   #It is very bad
 ```
-```{r}
-#Making dataframe with only the predictors we are interested 
-dff <- df %>% select(Diagnosis1, ID, speechrate, pause_duration, prop_spoken_time, pitch_IQR)
 
+```{r}
 #Partitioning 
-p1 <- partition(dff, p = 0.2, cat_col = 'Diagnosis1', id_col = 'ID')
+p1 <- partition(df, p = 0.2, cat_col = 'Diagnosis1', id_col = 'ID')
   #Making test set 
 df_test <- p1[[1]]
   #Making train set 
@@ -107,6 +105,7 @@ df_train <- p1[[2]]
 
 #Scaling data 
 df_train <- df_train %>% mutate_if(is.numeric, scale)
+df_train <- df_train %>% select(ID, Diagnosis1, speechrate, pause_duration, pitch_IQR, prop_spoken_time)
 
 #looking at correlations
 a <-cor(df_train %>% 
@@ -121,10 +120,10 @@ a <- as.data.frame(a)
 
 # speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
 
-f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', dff)
-f1 <- glmer(dffgnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', dff)
-f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', dff)
-f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', dff)
+f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df_train)
+f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df_train)
+f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df_train)
+f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial', df_train)
 
 anova(f0, f1, f2, f3)
 
@@ -132,7 +131,7 @@ anova(f0, f1, f2, f3)
 ```
 
 
-Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
+we're using the packages groupdata2 and cvms in order to crossvalidate our model. for this we are trying to use support vector machines. we are also tuning the parameters in order to find the best combination of kernel and cost.
 
 ```{r}
 #from cvms 
@@ -160,10 +159,6 @@ clf_svm_model_fn <- function(train_data, formula, hyperparameters) {
   )
 }
 
-# Try the model function
-m1 <- clf_svm_model_fn(train_data = df_train, formula = Diagnosis1 ~ speechrate + pitch_IQR, 
-                       hyperparameters = list("kernel" = "linear"))
-
 ```
 
 
@@ -185,14 +180,10 @@ bnml_svm_predict_fn <- function(test_data, model, formula, hyperparameters, trai
   probabilities[[2]]
 }
 
-p1 <- bnml_svm_predict_fn(test_data = df_test, model = m1)
-p1
-
 ```
 
 ```{r}
-#create folds
-
+#create folds in training data
 set.seed(5)
 df_train <- fold(df_train, 
                  k = 10, 
@@ -200,13 +191,11 @@ df_train <- fold(df_train,
                  id_col = 'ID', 
                  num_fold_cols = 10)
 
-#now we can crossvalidate
-
+#now we can cross validate 
 doParallel::registerDoParallel()
 cv_4 <- cross_validate_fn(
   data = df_train,
-  formulas = c("Diagnosis1 ~ speechrate + pitch_IQR",
-               "Diagnosis1 ~ pitch_IQR + pause_duration"),
+  formulas = c("Diagnosis1 ~ speechrate + pitch_IQR"),
   type = "binomial",
   model_fn = clf_svm_model_fn,
   predict_fn = bnml_svm_predict_fn,
@@ -217,49 +206,51 @@ cv_4 <- cross_validate_fn(
   fold_cols = paste0(".folds_", 1:10)
 )
 
-# creating 1200 models, takes time
+# creating 600 models, takes time
 ```
 
-
+assesing the results to find the best combination:
 
 ```{r}
-
 cv_4 %>% 
   mutate(`Model ID` = 1:nrow(cv_4)) %>% 
   arrange(desc(`Balanced Accuracy`)) %>% 
   select_definitions(additional_includes = c("Balanced Accuracy", "F1", "MCC", "Model ID"))
 
-# this doesn't work
+```
 
-cv_4 %>% 
-  # Create Model ID with values 1:8
-  dplyr::mutate(`Model ID` = 1:nrow(cv_4)) %>% 
-  # Order by RMSE
-  dplyr::arrange(RMSE) %>% 
-  # Extract formulas and hyperparameters
-  select_definitions(additional_includes = c("RMSE", "Model ID"))
+now we want to fit our test data with the best model from our cross validation results.
+This model used a linear kernel to fit the support vectors and a cost of 1. 
 
-p <- cv_4$Predictions
+```{r}
+# correcting our test data so that is is also scaled and selecting the appropiate columns
+df_test <- df_test %>% mutate_if(is.numeric, scale)
+df_test <- df_test %>% select(ID, Diagnosis, Diagnosis1, speechrate, pause_duration, pitch_IQR, prop_spoken_time)
 
-ev <- evaluate(
-  data = df_test,
-  target_col = "Diagnosis1",
-  prediction_cols = "probability",
-  id_col = "ID",
-  id_method = "mean",
-  type = "binomial"
-)
+# we run m1 again to have everything here
+m1 <- clf_svm_model_fn(train_data = df_train, formula = Diagnosis1 ~ speechrate + pitch_IQR, 
+                       hyperparameters = list("kernel" = "linear"))
+
+# here we get the predictions on our test data, using m1
+pred_svm <- bnml_svm_predict_fn(test_data = df_test, model = m1)
+# gathering the actual values from the test data
+actual_values <- df_test %>% select(Diagnosis)
+# binding them to one df
+df_final <- cbind(actual_values, pred_svm)
+
+#creating predicted category from the numeric predictions
+df_final$pred_cat_svm <- ifelse(df_final$pred_svm > 0.8, 'Schizophrenia', 'Control') %>%  as.factor()
+
+cm_final <- confusionMatrix(df_final$pred_cat_svm, df_final$Diagnosis, positive = 'Schizophrenia')
+cm_final
 
 
 ```
 
-```{r}
-#Cross validation of the the logistic regression from the best features 
+now we compare with regular glm for comparison
 
-#set seed to get repeatable results
-#create folds and add them to the dataset
-set.seed(5)
-new <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+```{r}
+#Cross validation of the the logistic regression from the best feature 
 
 #create the function from package cvms in order to crossvalidate
 glm_model_fn <- function(train_data, formula, hyperparameters) {
@@ -276,22 +267,38 @@ glm_predict_fn <- function(test_data, model, formula,
   )
 }
 
-cv <- cross_validate_fn(data = new, 
-                  model_fn = glm_model_fn, 
-                  predict_fn = glm_predict_fn, 
-                  formulas = "Diagnosis ~ speechrate", 
-                  type ='binomial', 
-                  fold_cols = ".folds", 
-                  positive = 1) %>% as.data.frame()
+cv_5 <- cross_validate_fn(
+  data = df_train,
+  formulas = c("Diagnosis1 ~ speechrate + pitch_IQR"),
+  type = "binomial",
+  model_fn = glm_model_fn,
+  predict_fn = glm_predict_fn,
+  fold_cols = paste0(".folds_", 1:10)
+)
+
 
 ```
 
+```{r}
+# regular glm
+m3 <- glm_model_fn(train_data = df_train, formula = Diagnosis1 ~ speechrate + pitch_IQR)
+
+# here we get the predictions on our test data, using m3
+pred_glm <- glm_predict_fn(test_data = df_test, model = m3)
+# gathering the actual values from the test data
+actual_values <- df_test %>% select(Diagnosis)
+# binding them to one df
+df_final_2 <- cbind(actual_values, pred_glm)
+
+#creating predicted category from the numeric predictions
+df_final_2$pred_cat_glm <- ifelse(df_final_2$pred_glm > 0.8, 'Schizophrenia', 'Control') %>%  as.factor()
+
+cm_final_2 <- confusionMatrix(df_final_2$pred_cat_glm, df_final_2$Diagnosis, positive = 'Schizophrenia')
+cm_final_2
 
 
-N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
-N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
-N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
-N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
+```
+
 
 
 

@@ -37,7 +37,7 @@ load packages and data
 
 ```{r}
 library(pacman)
-p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, cvms, groupdata2)
+p_load(tidyverse, tidymodels, lme4, boot, caret, ranger, cvms, groupdata2, doParallel, e1071)
 
 df <- read_csv('SchizophreniaData.csv')
 
@@ -51,6 +51,7 @@ df <- df %>% mutate(Diagnosis = factor(Diagnosis),
                     speechrate = speechrate..nsyll.dur.
                     ) %>% 
   select(- Language, - time, - f0, - speechrate..nsyll.dur.) %>%
+  select(!starts_with('time'))
   select(ID, ID2, Subject, Study, Trial, Gender, Age, everything())
 
 
@@ -59,8 +60,8 @@ df <- df %>% mutate(prop_spoken_time = phonationtime..s. / dur..s.,
 
 df$pause_duration <-  ifelse(df$npause == 0, 0, df$pause_duration)
 
-df <- df %>% mutate_if(is.numeric, scale)
 
+# in case we need diagnosis as dummy code
 df$Diagnosis1 <-  ifelse(df$Diagnosis == 'Control', 0, 1) %>% as.factor()
 
 ```
@@ -81,13 +82,8 @@ apply feature selection techniques?
 ```{r}
 # find the one best feature from part 1
 
-m1 <- glmer(Diagnosis1 ~ speechrate + (1|ID), family = 'binomial', df)
-m3 <- glm(Diagnosis ~ speechrate, family = 'binomial', df)
+m1 <- glmer(Diagnosis ~ speechrate + (1|ID), family = 'binomial', df)
 summary(m1)
-
-tidy(m1)
-tidy(m3)
-
 
 pred_probs <- predict(m1, type = 'response', re.form = NA)
 actual_value <- df$Diagnosis
@@ -96,21 +92,24 @@ d <- tibble(pred_probs, actual_value)
 
 d$pred_category <- ifelse(d$pred_probs > 0.5, 'Schizophrenia', 'Control') %>%  as.factor()
 
-
-confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
-
-confusionMatrix(predict(m1) > 0.5, as.logical(df$Diagnosis1))
-
+cm <- confusionMatrix(d$pred_category, d$actual_value, positive = 'Schizophrenia')
+cm
 
 # find the performance measures 
-
+#see output of cm
 
 ```
 
 find the best combination of features
-best model
+
+to find the best model, we now split into training and testing data.
 
 ```{r}
+
+p1 <- partition(df, p = 0.2, cat_col = 'Diagnosis1', id_col = 'ID')
+
+df_test <- p1[[1]]
+df_train <- p1[[2]]
 
 ```
 
@@ -118,84 +117,172 @@ best model
 Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures. Alternatively, the groupdata2 and cvms package created by Ludvig are an easy solution. 
 
 ```{r}
+# scale and normalize? data
+df_train <- df_train %>% mutate_if(is.numeric, scale)
+df_train <- df_train %>% select(ID, Diagnosis1, speechrate, pause_duration, pitch_IQR, prop_spoken_time)
 
-# other method
-p_load(groupdata2)
+#exploratory model creation and feature selection
 
-#set seed here=?
 
-set.seed(5)
+#remove correlations
+a <-cor(df_train %>%  select_if(is.numeric))
+a <- as.data.frame(a)
 
-new <- fold(df, k = 5, cat_col = 'Diagnosis', id_col = 'ID') %>% arrange(.folds)
+```
 
-glm_model_fn <- function(train_data, formula, hyperparameters) {
-  glm(formula = formula, data = train_data, family = "binomial")
-}
 
-glm_predict_fn <- function(test_data, model, formula,
-                           hyperparameters, train_data) {
-  stats::predict(
-    object = model,
-    newdata = test_data,
-    type = "response",
-    allow.new.levels = TRUE
+```{r}
+#from cvms 
+
+clf_svm_model_fn <- function(train_data, formula, hyperparameters) {
+
+  # Optional hyperparameters:
+  #  - kernel
+  #  - cost
+
+  # Update missing hyperparameters with default values
+  hyperparameters <- update_hyperparameters(
+    kernel = "radial",
+    cost = 1,
+    hyperparameters = hyperparameters
+  )
+
+  e1071::svm(
+    formula = formula,
+    data = train_data,
+    kernel = hyperparameters[["kernel"]],
+    cost = hyperparameters[["cost"]],
+    type = "C-classification",
+    probability = TRUE  # Must enable probability here
   )
 }
 
-cross_validate_fn(data = new, 
-                  model_fn = glm_model_fn, 
-                  predict_fn = glm_predict_fn, 
-                  formulas = "Diagnosis ~ speechrate", 
-                  type ='binomial', 
-                  fold_cols = ".folds", 
-                  positive = 1)
+# Try the model function
+m1 <- clf_svm_model_fn(train_data = df_train, formula = Diagnosis1 ~ speechrate + pitch_IQR, 
+                       hyperparameters = list("kernel" = "linear"))
 
-?cross_validate
+```
 
-#don't think this works for mixed effects, no telling it that id is unique
 
-cv_model1 <- train(
-  Diagnosis ~ speechrate, 
-  data = df, 
-  method = "glm",
-  family = "binomial",
-  trControl = trainControl(method = "cv", number = 10)
+```{r}
+# Predict function for binomial SVM
+bnml_svm_predict_fn <- function(test_data, model, formula, hyperparameters, train_data) {
+  # Predict test set
+  predictions <- predict(
+    object = model,
+    newdata = test_data,
+    allow.new.levels = TRUE,
+    probability = TRUE
+  )
+  
+  # Extract probabilities
+  probabilities <- dplyr::as_tibble(attr(predictions, "probabilities"))
+  
+  # Return second column
+  probabilities[[2]]
+}
+
+p1 <- bnml_svm_predict_fn(test_data = df_test, model = m1)
+p1
+
+
+```
+
+```{r}
+#create folds
+
+set.seed(5)
+df_train <- fold(df_train, 
+                 k = 10, 
+                 cat_col = 'Diagnosis1', 
+                 id_col = 'ID', 
+                 num_fold_cols = 10)
+
+#now we can crossvalidate
+
+doParallel::registerDoParallel()
+cv_4 <- cross_validate_fn(
+  data = df_train,
+  formulas = "Diagnosis1 ~ speechrate + pitch_IQR",
+  type = "binomial",
+  model_fn = clf_svm_model_fn,
+  predict_fn = bnml_svm_predict_fn,
+  hyperparameters = list(
+    "kernel" = c("linear", "radial"),
+    "cost" = c(1, 5, 10)
+  ),
+  fold_cols = paste0(".folds_", 1:10)
 )
 
-cv_model2 <- train(
-  Diagnosis ~ pause_duration, 
-  data = df, 
-  method = "glm",
-  family = "binomial",
-  trControl = trainControl(method = "cv", number = 10)
+# creating 1200 models, takes time
+
+cv_4
+```
+
+
+
+```{r}
+cv_4 %>% 
+  mutate(`Model ID` = 1:nrow(cv_4)) %>% 
+  arrange(desc(`Balanced Accuracy`)) %>% 
+  select_definitions(additional_includes = c("Balanced Accuracy", "F1", "MCC", "Model ID"))
+
+# this doesn't work
+
+cv_4 %>% 
+  # Create Model ID with values 1:8
+  dplyr::mutate(`Model ID` = 1:nrow(cv_4)) %>% 
+  # Order by RMSE
+  dplyr::arrange(RMSE) %>% 
+  # Extract formulas and hyperparameters
+  select_definitions(additional_includes = c("RMSE", "Model ID"))
+
+p <- cv_4$Predictions
+p1 <- p[[1]]
+p1_fold1 <- p1 %>% filter(`Fold Column` == '.folds_1')
+prediction_1 <- p1_fold1$Prediction
+
+df_test<- cbind(df_train, prediction_1)
+
+```
+
+```{r}
+#final run?
+
+final_svm_model <- svm(Diagnosis1 ~ speechrate + pitch_IQR, type = 'C-classification', kernel = 'linear', cost = 1, df_train)
+
+pred <- predict(final_svm_model, df_test)
+
+
+?predict
+
+actual_value_t <- df_test$Diagnosis1
+
+d <- tibble(pred)
+
+
+```
+
+
+
+```{r}
+ev <- evaluate(
+  data = df_test,
+  target_col = "Diagnosis1",
+  prediction_cols = "probability",
+  id_col = "ID",
+  id_method = "mean",
+  type = "binomial"
 )
 
-summary(resamples(list(model1 = cv_model1, model2 = cv_model2)))$statistics$Accuracy
-
-pred_class <- predict(cv_model1, df)
-
-confusionMatrix(
-  data = relevel(pred_class, ref = "Schizophrenia"), 
-  reference = relevel(df$Diagnosis, ref = "Schizophrenia")
+most_challenging(
+  data = data,
+  type = "gaussian",
+  obs_id_col = "participant",
+  target_col = "score",
+  prediction_cols = "predicted score",
+  threshold = 0.20
 )
-
-
-
-set.seed(123)
-cv_model_pls <- train(
-  Diagnosis ~ ., 
-  data = df_model, 
-  method = "pls",
-  family = "binomial",
-  trControl = trainControl(method = "cv", number = 10),
-  preProcess = c("zv", "center"),
-  tuneLength = 16
-)
-
-# Model with lowest RMSE
-cv_model_pls$bestTune
-
-# recalculate performance measures
 
 
 ```
@@ -204,82 +291,8 @@ cv_model_pls$bestTune
 N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
 N.N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
 
-```{r}
-#calculate for each fold or overall?
-
-```
-
 
 N.N.N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
 N.N.N.N.B. A more advanced solution could rely on the tidymodels set of packages (warning: Time-consuming to learn as the documentation is sparse, but totally worth it)
-
-
-
-
-
-
-```{r}
-
-#for parallel processing
-doParallel::registerDoParallel()
-
-
-set.seed(123)
-
-df_model <- df %>% select(Diagnosis, pitch_mean, pitch_sd, pitch_IQR, pause_duration, prop_spoken_time, speechrate)
-
-#collinearity?
-a <-cor(df_model %>% select_if(is.numeric))
-a <- as.data.frame(a)
-autoplot(a)
-
-#test and train set
-df_split <- initial_split(df_model, strata = Diagnosis)
-df_train <- training(df_split)
-df_test <- testing(df_split)
-
-#creating model specs
-glm_spec <- logistic_reg() %>% 
-  set_engine('glmer')
-
-rf_spec <- rand_forest() %>% 
-  set_mode('classification') %>% 
-  set_engine('ranger')
-
-
-#creating a workflow
-devtools::install_github("tidymodels/multilevelmod")
-
-p_load(multilevelmod)
-# seems like we need this package, which is currently udner development and not het released-
-
-
-wf <- workflow() %>% 
-  add_recipe(recipe(Diagnosis ~ pause_duration, data = df_model)) %>% 
-  add_model(glm_spec, formula = glmer(Diagnosis ~ pause_duration + (1|ID), family = 'binomial', data = df_model))
-                                                                                                   
-                                                                                            
-glm_result <- wf %>% 
-  add_model(glm_spec) %>% 
-  fit(data = df_train)
-
-glm_result
-
-
-rf_result <- wf %>% 
-  add_model(rf_spec) %>% 
-  fit(data = df_train)
-
-rf_result
-
-#evaluate model
-
-glm_result %>% 
-
-```
-
-
-
-
 
 
