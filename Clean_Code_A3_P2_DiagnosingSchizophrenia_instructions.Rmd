@@ -105,6 +105,7 @@ df_train <- p1[[2]]
 
 #Scaling data 
 df_train <- df_train %>% mutate_if(is.numeric, scale)
+  #Cleaning data 
 df_train <- df_train %>% select(ID, Diagnosis1, speechrate, pause_duration, pitch_IQR, prop_spoken_time)
 
 #looking at correlations
@@ -118,8 +119,6 @@ a <- as.data.frame(a)
 ```{r}
 #Identify the best combination of acoustic features to diagnose schizophrenia using logistic regression
 
-# speechrate and proportion of spoken time are highly correlated so we choose to remove proportion of spoken time
-
 f0 <- glmer(Diagnosis1 ~ speechrate + pause_duration + pitch_IQR + (1|ID), family = 'binomial', df_train)
 f1 <- glmer(Diagnosis1 ~ speechrate + pause_duration + (1|ID), family = 'binomial', df_train)
 f2 <- glmer(Diagnosis1 ~ speechrate + pitch_IQR + (1|ID), family = 'binomial', df_train)
@@ -127,15 +126,16 @@ f3 <- glmer(Diagnosis1 ~ pause_duration + pitch_IQR + (1|ID), family = 'binomial
 
 anova(f0, f1, f2, f3)
 
-# f2 is the best model when comparing AIC and BIC
+  #f2 is the best model when comparing AIC and BIC
 ```
 
 
 we're using the packages groupdata2 and cvms in order to crossvalidate our model. for this we are trying to use support vector machines. we are also tuning the parameters in order to find the best combination of kernel and cost.
 
 ```{r}
-#from cvms 
+#From cvms 
 
+#Making svm function
 clf_svm_model_fn <- function(train_data, formula, hyperparameters) {
 
   # Optional hyperparameters:
@@ -163,7 +163,9 @@ clf_svm_model_fn <- function(train_data, formula, hyperparameters) {
 
 
 ```{r}
+#Scaling test set
 df_test <- df_test %>% mutate_if(is.numeric, scale)
+
 # Predict function for binomial SVM
 bnml_svm_predict_fn <- function(test_data, model, formula, hyperparameters, train_data) {
   # Predict test set
